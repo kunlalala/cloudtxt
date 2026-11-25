@@ -27,9 +27,9 @@ export default defineConfig({
         // every icon is drawn full-bleed and inside the maskable safe zone, so Android never
         // pads it onto a white tile; "any maskable" lets the launcher use it either way
         icons: [
-          { src: 'pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-          { src: 'maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {
