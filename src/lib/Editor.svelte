@@ -1,0 +1,425 @@
+<script lang="ts">
+  import { onMount, untrack } from 'svelte'
+  import { Compartment, EditorState, Prec, RangeSetBuilder, type StateEffect } from '@codemirror/state'
+  import {
+    Decoration,
+    EditorView,
+    ViewPlugin,
+    keymap,
+    lineNumbers,
+    highlightActiveLine,
+    highlightActiveLineGutter,
+    drawSelection,
+    type DecorationSet,
+    type ViewUpdate,
+  } from '@codemirror/view'
+  import { defaultKeymap, history, historyKeymap, indentWithTab, undo, redo, indentMore, indentLess } from '@codemirror/commands'
+  import {
+    foldGutter,
+    foldKeymap,
+    foldService,
+    foldEffect,
+    unfoldEffect,
+    foldable,
+    foldedRanges,
+    indentUnit,
+    bracketMatching,
+  } from '@codemirror/language'
+  import { HEADING_RE, HEADING_COLORS, HEADING_SIZES, STRONG_COLOR, strongRegex, outlineOf, type OutlineItem } from './headings'
+
+  let {
+    noteId,
+    content,
+    tabSize,
+    getFolds,
+    onfolds,
+    onoutline,
+    oncursor,
+    onchange,
+  }: {
+    noteId: string
+    content: string
+    tabSize: number
+    /** saved folded line numbers for a note */
+    getFolds: (id: string) => number[]
+    onfolds: (id: string, lines: number[]) => void
+    /** headings of the open note; called when they change */
+    onoutline: (items: OutlineItem[]) => void
+    /** line number (1-based) of the cursor; called when it changes */
+    oncursor: (line: number) => void
+    onchange: (v: string) => void
+  } = $props()
+
+  let host: HTMLDivElement
+  let view: EditorView | undefined
+  const tabs = new Compartment()
+
+  /** Fold a line when the following non-blank lines are indented deeper than it. */
+  const indentFold = foldService.of((state, from, to) => {
+    const doc = state.doc
+    const tab = state.tabSize
+    const indentOf = (text: string) => {
+      let col = 0
+      for (const ch of text) {
+        if (ch === ' ') col++
+        else if (ch === '\t') col += tab - (col % tab)
+        else break
+      }
+      return col
+    }
+    const line = doc.lineAt(from)
+    if (!line.text.trim()) return null
+    const base = indentOf(line.text)
+    let end = -1
+    for (let n = line.number + 1; n <= doc.lines; n++) {
+      const next = doc.line(n)
+      if (!next.text.trim()) continue
+      if (indentOf(next.text) <= base) break
+      end = next.to
+    }
+    return end > to ? { from: to, to: end } : null
+  })
+
+  /**
+   * Headings: a line starting (after optional indentation) with 1-6 "#" and a space. The "#" marks
+   * are hidden (except on the line being edited) and the line is drawn larger and coloured per level.
+   */
+  const HEADING = HEADING_RE
+  const headingLines = Array.from({ length: 6 }, (_, i) => Decoration.line({ class: `cm-h cm-h${i + 1}` }))
+  // keeps the indentation as wide as on normal lines, even though the heading text is bigger
+  const hideMarks = Decoration.replace({})
+  const strongMark = Decoration.mark({ class: 'cm-strong' })
+
+  const headings = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+      constructor(view: EditorView) {
+        this.decorations = this.build(view)
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.viewportChanged || u.selectionSet) this.decorations = this.build(u.view)
+      }
+      build(view: EditorView) {
+        const b = new RangeSetBuilder<Decoration>()
+        const { doc, selection } = view.state
+        let last = -1
+        for (const { from, to } of view.visibleRanges) {
+          for (let pos = from; pos <= to; ) {
+            const line = doc.lineAt(pos)
+            pos = line.to + 1
+            if (line.from <= last) continue
+            last = line.from
+            const m = HEADING.exec(line.text)
+            if (!m) continue
+            b.add(line.from, line.from, headingLines[m[2].length - 1])
+            const editing = selection.ranges.some((r) => r.from <= line.to && r.to >= line.from)
+            if (!editing) b.add(line.from + m[1].length, line.from + m[0].length, hideMarks)
+          }
+        }
+        return b.finish()
+      }
+    },
+    {
+      decorations: (v) => v.decorations,
+      provide: (p) =>
+        EditorView.atomicRanges.of((view) => view.plugin(p)?.decorations ?? Decoration.none),
+    },
+  )
+
+  /**
+   * Strong: "!!text!!" is drawn red and bold. The "!!" marks are hidden except on the line being
+   * edited. Only the replace ranges are atomic; the text between them stays editable.
+   */
+  const strong = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+      atoms: DecorationSet
+      constructor(view: EditorView) {
+        ;({ decorations: this.decorations, atoms: this.atoms } = this.build(view))
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.viewportChanged || u.selectionSet)
+          ({ decorations: this.decorations, atoms: this.atoms } = this.build(u.view))
+      }
+      build(view: EditorView) {
+        const all = new RangeSetBuilder<Decoration>()
+        const atoms = new RangeSetBuilder<Decoration>()
+        const { doc, selection } = view.state
+        let last = -1
+        for (const { from, to } of view.visibleRanges) {
+          for (let pos = from; pos <= to; ) {
+            const line = doc.lineAt(pos)
+            pos = line.to + 1
+            if (line.from <= last) continue
+            last = line.from
+            if (!line.text.includes('!!')) continue
+            const editing = selection.ranges.some((r) => r.from <= line.to && r.to >= line.from)
+            for (const m of line.text.matchAll(strongRegex())) {
+              const s = line.from + m.index
+              const e = s + m[0].length
+              if (editing) {
+                all.add(s, e, strongMark)
+              } else {
+                all.add(s, s + 2, hideMarks)
+                all.add(s + 2, e - 2, strongMark)
+                all.add(e - 2, e, hideMarks)
+                atoms.add(s, s + 2, hideMarks)
+                atoms.add(e - 2, e, hideMarks)
+              }
+            }
+          }
+        }
+        return { decorations: all.finish(), atoms: atoms.finish() }
+      }
+    },
+    {
+      decorations: (v) => v.decorations,
+      provide: (p) => EditorView.atomicRanges.of((view) => view.plugin(p)?.atoms ?? Decoration.none),
+    },
+  )
+
+  /**
+   * Wrapped lines keep their indentation (hanging indent) and a long word can no longer leave an
+   * empty row behind the indentation:
+   * - the line gets padding-left = indentation and a matching negative text-indent, so the
+   *   continuation rows start under the first character of the text;
+   * - the leading whitespace is one unbreakable piece, so the line cannot wrap right after it;
+   * - it is measured in the normal font (--cw is one "ch" of the editor font, resolved on
+   *   .cm-content), so a bigger heading or CJK text does not change the indent width.
+   */
+  const lead = (tab: number) =>
+    Decoration.mark({
+      class: 'cm-lead',
+      attributes: { style: `tab-size: calc(${tab} * 1ch)` },
+    })
+
+  const layout = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+      constructor(view: EditorView) {
+        this.decorations = this.build(view)
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.viewportChanged || u.startState.tabSize !== u.state.tabSize)
+          this.decorations = this.build(u.view)
+      }
+      build(view: EditorView) {
+        const b = new RangeSetBuilder<Decoration>()
+        const { doc, tabSize } = view.state
+        const mark = lead(tabSize)
+        const hang = new Map<number, Decoration>()
+        let last = -1
+        for (const { from, to } of view.visibleRanges) {
+          for (let pos = from; pos <= to; ) {
+            const line = doc.lineAt(pos)
+            pos = line.to + 1
+            if (line.from <= last) continue
+            last = line.from
+            const text = line.text
+            let end = 0
+            let cols = 0
+            while (end < text.length && (text[end] === ' ' || text[end] === '\t')) {
+              cols += text[end] === '\t' ? tabSize - (cols % tabSize) : 1
+              end++
+            }
+            if (!end || end === text.length) continue
+            let d = hang.get(cols)
+            if (!d) {
+              d = Decoration.line({
+                attributes: {
+                  style: `padding-left: calc(12px + var(--cw) * ${cols}); text-indent: calc(var(--cw) * -${cols})`,
+                },
+              })
+              hang.set(cols, d)
+            }
+            b.add(line.from, line.from, d)
+            b.add(line.from, line.from + end, mark)
+          }
+        }
+        return b.finish()
+      }
+    },
+    { decorations: (v) => v.decorations },
+  )
+
+  const theme = EditorView.theme(
+    {
+      '&': { height: '100%', color: 'var(--fg)', backgroundColor: 'var(--bg)' },
+      '&.cm-focused': { outline: 'none' },
+      '.cm-scroller': { fontFamily: 'var(--mono)', fontSize: 'var(--ed-size)', lineHeight: '1.6', overflow: 'auto' },
+      '.cm-content': { padding: '12px 0', caretColor: 'var(--fg)', '--cw': '1ch' },
+      '.cm-line': { padding: '0 12px', overflowWrap: 'anywhere' },
+      '.cm-h': { fontWeight: '700' },
+      '.cm-strong': { color: STRONG_COLOR, fontWeight: '700' },
+      '.cm-lead': { fontSize: 'var(--ed-size)', fontWeight: '400', whiteSpace: 'pre' },
+      '.cm-h1': { fontSize: HEADING_SIZES[0], color: HEADING_COLORS[0] },
+      '.cm-h2': { fontSize: HEADING_SIZES[1], color: HEADING_COLORS[1] },
+      '.cm-h3': { fontSize: HEADING_SIZES[2], color: HEADING_COLORS[2] },
+      '.cm-h4': { fontSize: HEADING_SIZES[3], color: HEADING_COLORS[3] },
+      '.cm-h5': { fontSize: HEADING_SIZES[4], color: HEADING_COLORS[4] },
+      '.cm-h6': { fontSize: HEADING_SIZES[5], color: HEADING_COLORS[5] },
+      '.cm-cursor': { borderLeftColor: 'var(--fg)' },
+      '.cm-gutters': { backgroundColor: 'var(--bg)', color: 'var(--muted)', border: 'none' },
+      '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,0.04)' },
+      '.cm-activeLineGutter': { backgroundColor: 'rgba(255,255,255,0.04)', color: 'var(--fg)' },
+      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
+        backgroundColor: 'rgba(97,175,239,0.3)',
+      },
+      '.cm-foldGutter': { minWidth: '28px' },
+      '.cm-foldGutter .cm-gutterElement': { cursor: 'pointer', textAlign: 'center' },
+      '.cm-fold-marker': { display: 'inline-block', width: '28px', color: 'var(--muted)', userSelect: 'none' },
+      '.cm-fold-marker:hover': { color: 'var(--fg)' },
+      '.cm-foldPlaceholder': {
+        backgroundColor: 'var(--hover)',
+        border: 'none',
+        color: 'var(--muted)',
+        padding: '0 6px',
+      },
+    },
+    { dark: true },
+  )
+
+  function marker(open: boolean) {
+    const el = document.createElement('span')
+    el.className = 'cm-fold-marker'
+    el.textContent = open ? '▾' : '▸'
+    el.title = open ? 'Fold' : 'Unfold'
+    return el
+  }
+
+  function createState(doc: string) {
+    return EditorState.create({
+      doc,
+      extensions: [
+        lineNumbers(),
+        foldGutter({ markerDOM: marker }),
+        highlightActiveLineGutter(),
+        highlightActiveLine(),
+        drawSelection(),
+        history(),
+        bracketMatching(),
+        indentUnit.of('\t'),
+        tabs.of(EditorState.tabSize.of(tabSize)),
+        EditorView.lineWrapping,
+        Prec.high(indentFold),
+        headings,
+        strong,
+        layout,
+        theme,
+        keymap.of([indentWithTab, ...foldKeymap, ...historyKeymap, ...defaultKeymap]),
+        EditorView.updateListener.of((u) => {
+          if (u.docChanged) {
+            onchange(u.state.doc.toString())
+            emitOutline(u.state)
+          }
+          if (u.docChanged || u.selectionSet) emitCursor(u.state)
+          const foldChanged = u.transactions.some((tr) => tr.effects.some((e) => e.is(foldEffect) || e.is(unfoldEffect)))
+          if (!restoring && (u.docChanged || foldChanged)) onfolds(current, foldedLines(u.state))
+        }),
+      ],
+    })
+  }
+
+  let outlineKey = ''
+  function emitOutline(state: EditorState, force = false) {
+    const doc = state.doc
+    const items = outlineOf({ count: doc.lines, text: (n) => doc.line(n).text })
+    const key = JSON.stringify(items)
+    if (!force && key === outlineKey) return
+    outlineKey = key
+    onoutline(items)
+  }
+
+  let cursorLine = -1
+  function emitCursor(state: EditorState, force = false) {
+    const line = state.doc.lineAt(state.selection.main.head).number
+    if (!force && line === cursorLine) return
+    cursorLine = line
+    oncursor(line)
+  }
+
+  /** Used by the phone toolbar, which has no Ctrl+Z or Tab key. */
+  export function run(cmd: 'undo' | 'redo' | 'indent' | 'unindent') {
+    if (!view) return
+    const c = { undo, redo, indent: indentMore, unindent: indentLess }[cmd]
+    c(view)
+  }
+
+  /** Move the cursor to a line and scroll it to the top; folded blocks that hide it are opened. */
+  export function goToLine(line: number) {
+    if (!view) return
+    const st = view.state
+    const pos = st.doc.line(Math.min(Math.max(line, 1), st.doc.lines)).from
+    const effects: StateEffect<unknown>[] = [EditorView.scrollIntoView(pos, { y: 'start', yMargin: 8 })]
+    foldedRanges(st).between(pos, pos, (from, to) => {
+      if (from <= pos && to >= pos) effects.push(unfoldEffect.of({ from, to }))
+    })
+    view.dispatch({ selection: { anchor: pos }, effects })
+    // on a phone, focusing would pop up the keyboard
+    if (window.matchMedia('(min-width: 768px)').matches) view.focus()
+  }
+
+  /** Folds are saved as the line numbers of folded lines, so they survive offset changes. */
+  function foldedLines(state: EditorState) {
+    const lines: number[] = []
+    foldedRanges(state).between(0, state.doc.length, (from) => {
+      lines.push(state.doc.lineAt(from).number)
+    })
+    return lines
+  }
+
+  let restoring = false
+  function restoreFolds(id: string) {
+    if (!view) return
+    const st = view.state
+    const effects = []
+    for (const n of getFolds(id)) {
+      if (n < 1 || n > st.doc.lines) continue
+      const line = st.doc.line(n)
+      const range = foldable(st, line.from, line.to)
+      if (range) effects.push(foldEffect.of(range))
+    }
+    if (!effects.length) return
+    restoring = true
+    try {
+      view.dispatch({ effects })
+    } finally {
+      restoring = false
+    }
+  }
+
+  onMount(() => {
+    view = new EditorView({ state: createState(content), parent: host })
+    restoreFolds(current)
+    emitOutline(view.state, true)
+    emitCursor(view.state, true)
+    return () => view?.destroy()
+  })
+
+  // Swap the document only when another note is opened (history is per note switch).
+  let current = untrack(() => noteId)
+  $effect(() => {
+    const id = noteId
+    if (!view || id === current) return
+    current = id
+    view.setState(untrack(() => createState(content)))
+    view.scrollDOM.scrollTop = 0
+    restoreFolds(id)
+    emitOutline(view.state, true)
+    emitCursor(view.state, true)
+  })
+
+  $effect(() => {
+    const n = tabSize
+    view?.dispatch({ effects: tabs.reconfigure(EditorState.tabSize.of(n)) })
+  })
+</script>
+
+<div class="editor" bind:this={host}></div>
+
+<style>
+  .editor {
+    height: 100%;
+    min-height: 0;
+  }
+</style>
