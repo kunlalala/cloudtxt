@@ -36,4 +36,4 @@ notes: [{id,title,content,folderId,updatedAt,deleted?}] }
 Delete via soft delete (deleted: true), otherwise it will "revive" during synchronization.
 
 ## Current Stage
-Stage 1 (local-only: tree, CodeMirror editor, IndexedDB; no Google/images/sync/PWA yet)
+Stage 2 (local-only notes + PWA, deployed to https://kunlalala.github.io/cloudtxt/ via GitHub Actions; no Google/images/sync yet)

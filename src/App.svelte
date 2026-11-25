@@ -9,6 +9,7 @@
   import type { OutlineItem } from './lib/headings'
   import type { DialogState } from './lib/dialog'
   import { store, UNTITLED, TAB_SIZES } from './lib/store.svelte'
+  import { pwa } from './lib/pwa.svelte'
 
   let drawer = $state(false)
   let outlineDrawer = $state(false)
@@ -35,6 +36,7 @@
 
   onMount(() => {
     void store.init()
+    pwa.init()
     const flush = () => void store.flush()
     const onVis = () => document.visibilityState === 'hidden' && flush()
     document.addEventListener('visibilitychange', onVis)
@@ -144,6 +146,19 @@
     onclose={() => (outlineDrawer = false)}
   />
 </div>
+
+{#if pwa.updateReady}
+  <div class="toast" role="status">
+    <span>A new version is ready.</span>
+    <button class="go" onclick={() => pwa.update()}>Update</button>
+    <button class="later" aria-label="Later" onclick={() => (pwa.updateReady = false)}>✕</button>
+  </div>
+{:else if pwa.offlineReady}
+  <div class="toast" role="status">
+    <span>Ready to work offline.</span>
+    <button class="later" aria-label="Close" onclick={() => (pwa.offlineReady = false)}>✕</button>
+  </div>
+{/if}
 
 {#if dialog}
   <Dialog {dialog} onclose={() => (dialog = null)} />
@@ -272,6 +287,45 @@
   @media (min-width: 768px) and (pointer: fine) {
     .tools {
       display: none;
+    }
+  }
+  .toast {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 64px;
+    max-width: 420px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 4px 4px 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 90;
+    font-size: 0.9rem;
+  }
+  .toast span {
+    flex: 1;
+  }
+  .toast .go {
+    background: var(--accent);
+    color: #0b1220;
+    border-color: transparent;
+  }
+  .toast .later {
+    background: none;
+    border: none;
+    color: var(--muted);
+  }
+  @media (min-width: 768px) {
+    .toast {
+      bottom: 16px;
+      right: 16px;
+      left: auto;
+      margin: 0;
     }
   }
   .hint {

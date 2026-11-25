@@ -18,7 +18,7 @@ export interface GuideSection {
   steps: GuideStep[]
 }
 
-export const GUIDE_UPDATED = 'Stage 1 (local-only version)'
+export const GUIDE_UPDATED = 'Stage 2 (GitHub Pages + installable PWA)'
 
 export const guide: GuideSection[] = [
   {
@@ -38,19 +38,18 @@ export const guide: GuideSection[] = [
     steps: [
       {
         id: 'hosting',
-        title: 'Take down the static site',
+        title: 'Take down the GitHub Pages site',
         detail:
-          'Not deployed yet. Once deployed, write here: hosting platform, project name, console link, how to delete it.',
-        status: 'planned',
-        stage: 'fill in when deployed',
+          'The site is published at https://kunlalala.github.io/cloudtxt/ by the GitHub Actions workflow .github/workflows/static.yml (it runs on every push to master). To take it down: GitHub repo kunlalala/cloudtxt → Settings → Pages → "Unpublish site" (if you do not see it, deleting the repository always removes the site). Deleting only the workflow file does NOT unpublish the site that is already live.',
+        status: 'active',
       },
       {
         id: 'domain',
         title: 'Remove the domain / DNS records (if any)',
         detail:
-          'Not used yet. Once you have a custom domain, write here: registrar, DNS records, how to cancel renewal.',
+          'No custom domain is used (the address is the free github.io one). If you add one later, write here: registrar, DNS records, how to cancel renewal.',
         status: 'planned',
-        stage: 'fill in when deployed',
+        stage: 'only if you add a custom domain',
       },
     ],
   },
@@ -63,14 +62,14 @@ export const guide: GuideSection[] = [
         detail:
           'Includes cloudtxt.json, pre-overwrite backups and compressed images. Google Drive → Settings → Manage apps → cloudtxt → "Delete hidden app data".',
         status: 'planned',
-        stage: 'Stage 2/3: sync and images',
+        stage: 'Stage 4–6: Drive sync and images',
       },
       {
         id: 'drive-revoke',
         title: 'Revoke the app authorization',
         detail: 'Open myaccount.google.com/permissions, find cloudtxt and choose "Delete all connections".',
         status: 'planned',
-        stage: 'Stage 2: Google sign-in',
+        stage: 'Stage 4: Google sign-in',
       },
     ],
   },
@@ -83,7 +82,7 @@ export const guide: GuideSection[] = [
         detail:
           'Google Cloud Console → APIs & Services → Credentials → delete the cloudtxt OAuth 2.0 Client ID.',
         status: 'planned',
-        stage: 'Stage 2: Google sign-in',
+        stage: 'Stage 3: Google Cloud setup',
       },
       {
         id: 'gcp-project',
@@ -91,7 +90,7 @@ export const guide: GuideSection[] = [
         detail:
           'IAM & Admin → Settings → Shut down. The project is kept for about 30 days before permanent deletion. Only do this if the project contains nothing but cloudtxt.',
         status: 'planned',
-        stage: 'Stage 2: Google sign-in',
+        stage: 'Stage 3: Google Cloud setup',
       },
     ],
   },
@@ -107,11 +106,10 @@ export const guide: GuideSection[] = [
       },
       {
         id: 'local-pwa',
-        title: 'Uninstall the installed PWA and unregister the service worker',
+        title: 'Uninstall the installed app and remove the offline cache',
         detail:
-          'Remove the cloudtxt icon from desktops / phone home screens, and clear site data to drop the offline cache.',
-        status: 'planned',
-        stage: 'Stage 4: PWA',
+          'On every phone / computer where you installed cloudtxt: remove the home-screen icon or uninstall it (Android: long-press the icon → Uninstall; iPhone: long-press → Remove App; Chrome / Edge on a computer: open the app → menu → "Uninstall cloudtxt"). Then clear the site data for kunlalala.github.io (browser settings → privacy → site data). This also deletes the service worker and its offline cache (named workbox-precache). A browser tab that is still open keeps running the old copy until it is closed.',
+        status: 'active',
       },
     ],
   },
@@ -122,7 +120,7 @@ export const guide: GuideSection[] = [
         id: 'repo',
         title: 'Deal with the source repository',
         detail:
-          'Currently only the local cloudtxt folder, with no remote recorded. If you later push to GitHub or similar, write the repo address here and delete it.',
+          'The source is the local cloudtxt folder and the GitHub repository https://github.com/kunlalala/cloudtxt (branch master). Delete the repository on GitHub (Settings → General → Danger Zone → Delete this repository), then delete the local folder. Deleting the repository also removes the GitHub Pages site and its Actions history.',
         status: 'active',
       },
       {

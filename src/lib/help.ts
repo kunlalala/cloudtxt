@@ -16,7 +16,7 @@ export interface HelpSection {
   blocks: Block[]
 }
 
-export const HELP_UPDATED = 'Stage 1 (local-only version)'
+export const HELP_UPDATED = 'Stage 2 (local notes, installable, works offline)'
 
 export const help: HelpSection[] = [
   {
@@ -29,7 +29,7 @@ export const help: HelpSection[] = [
       },
       {
         type: 'p',
-        text: 'Current version: Stage 1, local-only. Notes live in your browser on this device. There is no account, no Google sign-in, no sync between devices, no images and no offline-install (PWA) yet. Those come in later stages (see "Roadmap").',
+        text: 'Current version: Stage 2. Notes live in your browser on this device. The app can be installed on your phone or computer and works without a network. There is no account, no Google sign-in, no sync between devices and no images yet. Those come in later stages (see "Roadmap").',
       },
       {
         type: 'ul',
@@ -53,6 +53,38 @@ export const help: HelpSection[] = [
           'Tap a note to open it in the editor on the right.',
           'Tap "⋯" at the end of any row for rename, move and delete.',
           'On a phone, tap "☰" at the top left to open the sidebar. To jump between headings, use the outline button in the top bar.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'install',
+    title: 'Install and offline use',
+    blocks: [
+      {
+        type: 'p',
+        text: 'cloudtxt is a web app that can be installed like a normal app and keeps working without a network. It lives at https://kunlalala.github.io/cloudtxt/.',
+      },
+      {
+        type: 'table',
+        head: ['Device', 'How to install'],
+        rows: [
+          ['Android (Chrome)', 'Open the site, open the Chrome menu (three dots) and choose "Add to Home screen" or "Install app". Choose "Install" if it is offered, so it opens in its own window.'],
+          ['iPhone / iPad (Safari)', 'Open the site, tap Share and choose "Add to Home Screen".'],
+          ['Computer (Chrome or Edge)', 'Click the install icon at the right end of the address bar, or open the menu and choose "Install cloudtxt".'],
+        ],
+      },
+      {
+        type: 'ul',
+        items: [
+          'Installing is optional. You can also just use the site in the browser.',
+          'Offline: after the first visit with a network, the whole app is saved on the device. Later you can open it and write with no network at all (for example in flight mode). A short "Ready to work offline" message appears the first time.',
+          'Your notes are saved on the device whether or not you are online. Nothing is uploaded.',
+          'A plain browser shortcut (a bookmark or a "shortcut" made from the browser menu) is not the same as installing: it may open the page but cannot guarantee that everything loads without a network. Use "Install app" or "Add to Home screen".',
+          'Updates: when a new version is published, a banner "A new version is ready" appears with an Update button. Your text is saved first, then the app reloads. If you ignore the banner, the old version keeps working and the banner returns next time you open the app.',
+          'The app checks for updates when you open it and when you come back to it; this needs a network. Offline, you simply keep the version you have.',
+          'To get a fresh copy by hand: close the app completely and open it again twice (the first open downloads the update, the second uses it), or tap Update on the banner.',
+          'Removing the app does not delete your notes by itself, because they belong to the site data of the browser. See the "Delete app guide" button for how to clear everything.',
         ],
       },
     ],
@@ -411,7 +443,7 @@ export const help: HelpSection[] = [
           'No drag and drop (use Move to…).',
           'Only headings and strong text are formatted; no italic, links, lists or code blocks, and no Markdown preview.',
           'On a phone there are no keyboard shortcuts for moving or duplicating lines, or for fold all / unfold all.',
-          'No images, no Google sign-in, no sync, no install-as-app (PWA).',
+          'No images, no Google sign-in, no sync.',
           'Undo history is not kept after switching notes or reloading.',
           'Heading colours and sizes and the theme cannot be changed in settings (only the indent width can).',
         ],
@@ -425,10 +457,10 @@ export const help: HelpSection[] = [
       {
         type: 'ul',
         items: [
-          'Stage 1 (now): local notes, folders, editor, IndexedDB, dark theme.',
+          'Stage 1: local notes, folders, editor, IndexedDB, dark theme (done).',
+          'Stage 2 (now): installable app (PWA) with offline support, published on GitHub Pages.',
           'Later: Google sign-in and background sync through Drive appdata (last write wins, with a backup before overwriting).',
           'Later: images, compressed and stored separately and referenced from notes.',
-          'Later: installable app (PWA) with offline support.',
         ],
       },
       {
@@ -454,7 +486,10 @@ export const help: HelpSection[] = [
           'Strong text: a second CodeMirror view plugin finds /!!(?=\\S)([^\\n]*?\\S)!!/g on visible lines, marks the text between the "!!" with the class cm-strong (red, bold) and hides the two "!!" marks with replace decorations, except on lines that touch the selection. Only the hidden marks are atomic, so the cursor skips the marks but can enter the text. The outline removes the marks from heading text.',
           'Outline: the editor scans the lines of the note for the heading pattern after every change and reports the list only when it differs from the last one. The outline panel highlights the last heading at or above the cursor line. Jumping dispatches a selection plus EditorView.scrollIntoView(y: start), and unfolds any folded range that contains the target line. The desktop open/closed choice is stored in the meta store key "outlineOpen"; the phone drawer always starts closed.',
           'Headings: a CodeMirror view plugin matches /^([ \t]*)(#{1,6})[ \t]+/ on visible lines, adds a line decoration (cm-h1…cm-h6, which set size, colour and bold) and hides the marks with a replace decoration, except on lines that touch the selection. The hidden range is registered as an atomic range so the cursor skips over it. Leading indentation is wrapped in a mark that keeps the normal font size, is never broken across rows and uses a tab width of N "ch", so indented headings stay aligned with normal lines. A second plugin gives every indented line padding-left equal to its indentation (columns times --cw, one "ch" of the normal editor font, a registered CSS length) with a matching negative text-indent, which is what makes wrapped rows hang under the text. The width comes from CSS, not from a measurement in JavaScript, so it cannot go out of date while you type. Heading sizes are CSS variables (--h1-size…--h6-size in app.css) with smaller values under 768px.',
-          'Run locally: npm install, then npm run dev (add -- --host to open it from a phone on the same Wi-Fi). Build with npm run build.',
+          'Run locally: npm install, then npm run dev (add -- --host to open it from a phone on the same Wi-Fi). Build with npm run build. In dev mode the app is served from /cloudtxt/ (for example http://localhost:5173/cloudtxt/).',
+          'PWA: vite-plugin-pwa generates a web app manifest and a service worker (Workbox) at build time. Every built file is precached when the service worker installs (about 17 files, 0.4 MB), and page navigations fall back to the cached index.html, so the app opens with no network. The service worker only caches the app files; your notes are in IndexedDB, which it does not touch.',
+          'PWA updates: the service worker is registered in "prompt" mode. A new version downloads in the background and waits; the "A new version is ready" banner appears, and tapping Update saves pending edits, activates the new worker and reloads. The app also checks for a new version when it comes back to the front and once an hour.',
+          'Deployment: GitHub Actions (.github/workflows/static.yml) builds on every push to master and publishes dist to GitHub Pages. The site is served from the /cloudtxt/ path, which is the Vite base in vite.config.ts.',
         ],
       },
     ],
