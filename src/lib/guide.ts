@@ -18,7 +18,7 @@ export interface GuideSection {
   steps: GuideStep[]
 }
 
-export const GUIDE_UPDATED = 'Stage 2 (GitHub Pages + installable PWA)'
+export const GUIDE_UPDATED = 'Stage 4 (Google sign-in and manual Drive upload/download)'
 
 export const guide: GuideSection[] = [
   {
@@ -60,16 +60,15 @@ export const guide: GuideSection[] = [
         id: 'drive-data',
         title: 'Delete every file in Drive appdata',
         detail:
-          'Includes cloudtxt.json, pre-overwrite backups and compressed images. Google Drive → Settings → Manage apps → cloudtxt → "Delete hidden app data".',
-        status: 'planned',
-        stage: 'Stage 4–6: Drive sync and images',
+          'The app stores cloudtxt.json (all folders and notes) and cloudtxt.backup.json (the copy that was replaced by the last upload) in its hidden app folder. Images will be added later as img_<id>.jpg. Remove them with Google Drive → Settings → Manage apps → cloudtxt → "Delete hidden app data" (this removes the whole hidden folder, which is the cleanest option). The files are not visible in the normal Drive file list.',
+        status: 'active',
       },
       {
         id: 'drive-revoke',
         title: 'Revoke the app authorization',
-        detail: 'Open myaccount.google.com/permissions, find cloudtxt and choose "Delete all connections".',
-        status: 'planned',
-        stage: 'Stage 4: Google sign-in',
+        detail:
+          'Open myaccount.google.com/permissions, find cloudtxt and choose "Delete all connections". This kills any remaining access token even if it has not expired yet.',
+        status: 'active',
       },
     ],
   },
@@ -80,17 +79,22 @@ export const guide: GuideSection[] = [
         id: 'gcp-client',
         title: 'Delete the OAuth Client ID',
         detail:
-          'Google Cloud Console → APIs & Services → Credentials → delete the cloudtxt OAuth 2.0 Client ID.',
-        status: 'planned',
-        stage: 'Stage 3: Google Cloud setup',
+          'Google Cloud Console (project cloudtxt) → APIs & Services → Credentials → delete the OAuth 2.0 Client ID named cloudtxt. Its value is also pasted in src/lib/config.ts, so remove or empty it there before you leave the code behind. Options: APIs & Services → OAuth consent screen → also delete the test users.',
+        status: 'active',
+      },
+      {
+        id: 'gcp-drive-api',
+        title: 'Disable the Google Drive API',
+        detail:
+          'Google Cloud Console → APIs & Services → Enabled APIs → Google Drive API → Disable. Not strictly required once the project is deleted, but it stops any request that still holds the old Client ID.',
+        status: 'active',
       },
       {
         id: 'gcp-project',
         title: 'Shut down / delete the Google Cloud project',
         detail:
           'IAM & Admin → Settings → Shut down. The project is kept for about 30 days before permanent deletion. Only do this if the project contains nothing but cloudtxt.',
-        status: 'planned',
-        stage: 'Stage 3: Google Cloud setup',
+        status: 'active',
       },
     ],
   },
@@ -101,7 +105,7 @@ export const guide: GuideSection[] = [
         id: 'local-idb',
         title: 'Clear IndexedDB in the browser',
         detail:
-          'Do this in every browser / device you used: browser settings → privacy → site data → find this site → delete; or DevTools → Application → Storage → Clear site data. The database name is cloudtxt.',
+          'Do this in every browser / device you used: browser settings → privacy → site data → find this site → delete; or DevTools → Application → Storage → Clear site data. The database name is cloudtxt; besides folders and notes it holds the meta store, which includes the stored Google access token (driveToken) and the local safety copy made before a Drive download (backupBeforeDownload).',
         status: 'active',
       },
       {
@@ -127,7 +131,7 @@ export const guide: GuideSection[] = [
         id: 'final',
         title: 'Final check',
         detail:
-          'Confirm: the site no longer loads, Drive has no cloudtxt data, cloudtxt is gone from the permissions list, every device is cleaned.',
+          'Confirm: the site no longer loads, Drive appdata has no cloudtxt files, cloudtxt is gone from myaccount.google.com/permissions, the OAuth client and Google Cloud project are deleted, and every device is cleaned.',
         status: 'active',
       },
     ],

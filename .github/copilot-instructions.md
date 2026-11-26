@@ -12,6 +12,9 @@ Google Identity Services、Drive API v3、vite-plugin-pwa。
 
 - Drive permissions are only used at https://www.googleapis.com/auth/drive.appdata
 
+- Google sign-in is optional and lazy: Google Identity Services (`accounts.google.com/gsi/client`) is
+  loaded only when the Drive panel is used, and the app must stay fully usable while signed out or offline.
+
 - No backend server is needed; the entire project is purely static files.
 
 - Notes are stored as plain text. No Markdown: the only formatting is the custom heading syntax (a line starting, after optional indentation, with 1-6 `#` followed by a space), shown bigger/coloured with the `#` hidden off the cursor line, and the strong syntax `!!text!!` (red, bold, marks hidden off the cursor line). Do not add Markdown libraries.
@@ -36,4 +39,6 @@ notes: [{id,title,content,folderId,updatedAt,deleted?}] }
 Delete via soft delete (deleted: true), otherwise it will "revive" during synchronization.
 
 ## Current Stage
-Stage 2 (local-only notes + PWA, deployed to https://kunlalala.github.io/cloudtxt/ via GitHub Actions; no Google/images/sync yet)
+Stage 4 (local notes + PWA on GitHub Pages + Google sign-in and manual Drive upload/download).
+The OAuth Client ID lives in `src/lib/config.ts` (public value, empty until pasted). Automatic sync,
+merging and images are not implemented yet.

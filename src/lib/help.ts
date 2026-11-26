@@ -16,7 +16,7 @@ export interface HelpSection {
   blocks: Block[]
 }
 
-export const HELP_UPDATED = 'Stage 2 (local notes, installable, works offline)'
+export const HELP_UPDATED = 'Stage 4 (Google sign-in, manual Drive upload/download)'
 
 export const help: HelpSection[] = [
   {
@@ -94,6 +94,43 @@ export const help: HelpSection[] = [
     ],
   },
   {
+    id: 'drive',
+    title: 'Google Drive (sign-in and manual copy)',
+    blocks: [
+      {
+        type: 'p',
+        text: 'The cloud icon in the top bar (left of the outline button) opens the Google Drive panel. Google is optional: signed out, the app works exactly as before, offline and with no account.',
+      },
+      {
+        type: 'ul',
+        items: [
+          'Sign in with Google: Google shows its own window and asks for one permission only — see and manage the files this app creates in your Drive (scope drive.appdata). It cannot see the rest of your Drive, Gmail or Photos.',
+          'What is uploaded: every folder and every note, including items marked as deleted (a later sync needs those marks). Settings stay on each device: indent width, outline open/closed, folded lines and the sign-in token.',
+          'Upload to Drive: writes everything into cloudtxt.json in the app\'s hidden Drive folder. If a copy is already there, that old copy is saved first as cloudtxt.backup.json, so one upload can always be undone.',
+          'Download: replaces all folders and notes on this device with the Drive copy. It asks for confirmation first. The current local data is saved on the device before replacing it, and a "Restore it" line appears in the panel afterwards.',
+          'The panel lists the files in the hidden folder with their modification time, and a Refresh button updates the list.',
+          'Sign out forgets the token on this device and asks Google to revoke it. Your notes are not touched.',
+          'The access token lasts about one hour. While you use the app it renews itself without a window when Google still remembers your consent; if it cannot, the status becomes "Session expired" and the panel offers "Sign in again". The token is kept in this browser only.',
+          'There is no automatic sync in this version: two devices do not merge by themselves and the last Upload wins. Upload on one device, then Download on the other.',
+          'Without a network the panel cannot do anything, but writing notes is never blocked.',
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Status: grey cloud = not connected, accent (blue) cloud = connected, amber cloud = session expired. The small dot in the corner of the button shows that a session exists.',
+      },
+      {
+        type: 'ul',
+        items: [
+          '403 "Google refused the request": the Drive API is not enabled in the Cloud project, or this address is missing from the OAuth client\'s Authorized JavaScript origins.',
+          '"Access blocked" / "Authorization Error": the OAuth client does not list this exact address (scheme, host and port must match, for example http://localhost:5173).',
+          '"The sign-in window was blocked": allow pop-ups for this site.',
+          '"This build has no Google Client ID": the deployed build was made without the Client ID in src/lib/config.ts.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'layout',
     title: 'Screen layout (desktop and phone)',
     blocks: [
@@ -108,7 +145,7 @@ export const help: HelpSection[] = [
       {
         type: 'ul',
         items: [
-          'The top bar shows the title of the open note, the Indent menu and the outline button. On desktop the outline panel sits on the right of the editor.',
+          'The top bar shows the title of the open note, the Indent menu, the Google Drive button (cloud icon) and the outline button. On desktop the outline panel sits on the right of the editor.',
           'The sidebar shows the current folder path above the tree ("Root" if none).',
           'Dialogs (rename, move, delete) appear as a bottom sheet on phones and a centred box on desktop. Press Esc or tap outside to close.',
         ],
@@ -187,6 +224,7 @@ export const help: HelpSection[] = [
           'Deleting is a "soft delete": the item is only marked deleted: true and hidden. This is what later lets sync work correctly. There is no trash screen yet, so deleted items cannot be restored from the UI.',
           'Data belongs to one browser profile on one device at one address (origin). A different browser, a private window, a different device or a different address (for example localhost vs. a LAN IP) shows separate, empty data.',
           'Clearing "site data" / "cookies and site data" for this site deletes all notes. Copy anything important elsewhere until export is available.',
+          'If you are signed in to Google, the browser also stores the access token (meta key "driveToken") and, after a Download, the local safety copy (meta key "backupBeforeDownload"). Both are removed by clearing site data or by signing out.',
         ],
       },
     ],
@@ -426,10 +464,11 @@ export const help: HelpSection[] = [
       {
         type: 'ul',
         items: [
-          'Stage 1 sends nothing over the network. Notes stay in this browser only.',
-          'Because data is only in the browser, it can be lost if site data is cleared, the browser profile is deleted, or the browser removes storage of sites it considers unused (some mobile browsers do this after a period of inactivity).',
-          'Deleted notes remain in the browser database (soft delete) until site data is cleared.',
-          'When Google sync is added, it will use only the app-private Drive "appdata" area (scope drive.appdata), which cannot see your other Drive files.',
+          'Notes are written to this browser first, always. Nothing is sent anywhere until you open the Google Drive panel and press Upload.',
+          'The only network traffic is: loading the app (GitHub Pages), the Google sign-in script, and Drive requests you trigger. There is no analytics, no backend server and no third-party script besides Google sign-in.',
+          'Google access is limited to the app-private Drive area (scope drive.appdata), which cannot see your other Drive files.',
+          'Because data lives in the browser, it can be lost if site data is cleared, the browser profile is deleted, or the browser removes storage of sites it considers unused (some mobile browsers do this after a period of inactivity). Uploading a copy to Drive protects against that.',
+          'Deleted notes remain in the browser database and in the uploaded file (soft delete) until site data and the Drive file are deleted.',
         ],
       },
     ],
@@ -447,7 +486,8 @@ export const help: HelpSection[] = [
           'No drag and drop (use Move to…).',
           'Only headings and strong text are formatted; no italic, links, lists or code blocks, and no Markdown preview.',
           'On a phone there are no keyboard shortcuts for moving or duplicating lines, or for fold all / unfold all.',
-          'No images, no Google sign-in, no sync.',
+          'No images.',
+          'No automatic sync between devices yet: Drive upload and download are manual, and the last Upload wins. There is no merging of two devices.',
           'Undo history is not kept after switching notes or reloading.',
           'Heading colours and sizes and the theme cannot be changed in settings (only the indent width can).',
         ],
@@ -462,9 +502,11 @@ export const help: HelpSection[] = [
         type: 'ul',
         items: [
           'Stage 1: local notes, folders, editor, IndexedDB, dark theme (done).',
-          'Stage 2 (now): installable app (PWA) with offline support, published on GitHub Pages.',
-          'Later: Google sign-in and background sync through Drive appdata (last write wins, with a backup before overwriting).',
-          'Later: images, compressed and stored separately and referenced from notes.',
+          'Stage 2: installable app (PWA) with offline support, published on GitHub Pages (done).',
+          'Stage 3: Google Cloud project, Drive API and OAuth client (done, outside the app).',
+          'Stage 4 (now): Google sign-in and manual upload/download through Drive appdata, with a backup before the remote copy is replaced.',
+          'Stage 5: automatic sync between devices, per note and folder, last write wins, soft deletes purged later.',
+          'Stage 6: images, compressed and stored separately and referenced from notes.',
         ],
       },
       {
@@ -494,7 +536,10 @@ export const help: HelpSection[] = [
           'PWA: vite-plugin-pwa generates a web app manifest and a service worker (Workbox) at build time. Every built file is precached when the service worker installs (about 17 files, 0.4 MB), and page navigations fall back to the cached index.html, so the app opens with no network. The service worker only caches the app files; your notes are in IndexedDB, which it does not touch.',
           'PWA updates: the service worker is registered in "prompt" mode, so a new version downloads in the background and waits instead of reloading under your fingers. The app checks on start, on visibilitychange (visible) and every hour. When the page becomes hidden, a waiting update is applied immediately after flushing pending edits, which makes normal use feel auto-updating; when the page is visible the "A new version is ready" banner is used instead. Tapping Update flushes, activates the new worker and reloads (controllerchange).',
           'Icons: public/icons/icon-192.png, icon-512.png and icon-maskable-512.png use the same artwork (the Vite logo on a white #ffffff background, logo inside the 80% maskable safe zone) and are declared "any maskable" / "maskable", so Android uses the whole picture as the adaptive icon instead of padding it onto a white tile. The white background is deliberate: launchers that draw their own white tile behind a legacy shortcut no longer show a visible frame. apple-touch-icon.png (180x180) is used by iOS. Installed icons are baked in at install time, so a changed icon only shows after the app is re-added.',
-          'Deployment: GitHub Actions (.github/workflows/static.yml) builds on every push to master and publishes dist to GitHub Pages. The site is served from the /cloudtxt/ path, which is the Vite base in vite.config.ts.',
+          'Google sign-in: Google Identity Services token model, loaded lazily (script accounts.google.com/gsi/client) only when the Drive panel is used, so the app start is unaffected. Scope is drive.appdata. The token client is created per request (initTokenClient) so each promise gets its own callback; silent renewal uses prompt "" and falls back to "Session expired" when Google needs a click.',
+          'Drive client (src/lib/drive.ts): plain fetch against Drive v3. Files are searched with spaces=appDataFolder and a name query; cloudtxt.json is created with a multipart upload and rewritten with an uploadType=media PATCH. The previous remote copy is written to cloudtxt.backup.json before the main file is replaced. 401 responses trigger one silent token renewal and a single retry.',
+          'Cloud data format: { version: 1, updatedAt, folders: [...], notes: [...] }. It is the full store including soft-deleted items; IDs are unchanged between devices so a later stage can merge item by item. Download normalizes the file (missing fields get defaults) and refuses anything without folders/notes arrays. Replacing local data is one IndexedDB transaction (clear + put), and the previous local data is stored under meta key backupBeforeDownload for manual restore.',
+          'Deployment: GitHub Actions (.github/workflows/static.yml) builds on every push to master and publishes dist to GitHub Pages. The site is served from the /cloudtxt/ path, which is the Vite base in vite.config.ts. The OAuth Client ID lives in src/lib/config.ts and must list the deployed origin plus http://localhost:5173 as authorized JavaScript origins.',
         ],
       },
     ],
@@ -508,7 +553,10 @@ export const help: HelpSection[] = [
         head: ['Problem', 'What to check'],
         rows: [
           ['My notes are gone', 'Are you in the same browser, profile and address as before? Was site data cleared? Private windows start empty every time.'],
-          ['Phone shows no notes', 'Expected: phone and computer have separate storage until sync exists.'],
+          [
+            'Phone shows no notes',
+            'Phone and computer have separate storage. Upload on the device that has the notes, then open the Drive panel on the other device and Download (a confirmation and a restore point are offered).',
+          ],
           ['No fold arrow on a line', 'A line only folds if the lines below it are indented deeper. Indent the children with Tab.'],
           ['Heading looks like plain text', 'The # marks must be followed by a space, with 1 to 6 # characters. No space, or 7+ #, means it is plain text.'],
           ['I cannot see the # marks', 'They are hidden when the cursor is on another line. Click on the heading line to show them.'],

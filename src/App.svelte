@@ -6,16 +6,19 @@
   import Guide from './lib/Guide.svelte'
   import Help from './lib/Help.svelte'
   import Outline from './lib/Outline.svelte'
+  import DrivePanel from './lib/DrivePanel.svelte'
   import type { OutlineItem } from './lib/headings'
   import type { DialogState } from './lib/dialog'
   import { store, UNTITLED, TAB_SIZES } from './lib/store.svelte'
   import { pwa } from './lib/pwa.svelte'
+  import { cloud } from './lib/cloud.svelte'
 
   let drawer = $state(false)
   let outlineDrawer = $state(false)
   let dialog = $state<DialogState | null>(null)
   let guideOpen = $state(false)
   let helpOpen = $state(false)
+  let cloudOpen = $state(false)
   let editor = $state<Editor>()
   let outline = $state.raw<OutlineItem[]>([])
   let cursorLine = $state(0)
@@ -36,6 +39,7 @@
 
   onMount(() => {
     void store.init()
+    void cloud.init()
     pwa.init()
     const flush = () => void store.flush()
     const onVis = () => document.visibilityState === 'hidden' && flush()
@@ -87,6 +91,19 @@
       >
         {#each TAB_SIZES as n}<option value={n}>Indent {n}</option>{/each}
       </select>
+      <button
+        class="cloud"
+        class:on={cloud.status === 'signed-in'}
+        class:warn={cloud.status === 'expired'}
+        aria-label="Google Drive"
+        title="Google Drive"
+        onclick={() => (cloudOpen = true)}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.5 19a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.2 9.5A4.25 4.25 0 0 0 6.5 19z" />
+        </svg>
+        {#if cloud.status !== 'signed-out'}<span class="dot"></span>{/if}
+      </button>
       <button
         class="ol"
         class:on={store.outlineOpen}
@@ -169,6 +186,9 @@
 {#if helpOpen}
   <Help onclose={() => (helpOpen = false)} />
 {/if}
+{#if cloudOpen}
+  <DrivePanel onclose={() => (cloudOpen = false)} />
+{/if}
 
 <style>
   .app {
@@ -225,8 +245,11 @@
     background: var(--panel);
     color: var(--fg);
   }
+  .cloud,
   .ol {
+    position: relative;
     width: 44px;
+    height: 44px;
     padding: 0;
     background: none;
     border: none;
@@ -235,8 +258,24 @@
     align-items: center;
     justify-content: center;
   }
+  .cloud:hover,
   .ol:hover {
     color: var(--fg);
+  }
+  .cloud.on {
+    color: var(--accent);
+  }
+  .cloud.warn {
+    color: #e6c07b;
+  }
+  .cloud .dot {
+    position: absolute;
+    right: 9px;
+    bottom: 9px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
   }
   @media (min-width: 768px) {
     .ol.on {

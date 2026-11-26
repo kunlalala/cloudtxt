@@ -6,6 +6,18 @@ export interface Folder {
   deleted?: boolean
 }
 
+/**
+ * Shape of the JSON file kept in Drive appDataFolder.
+ * Only folders and notes are uploaded; UI settings stay on each device.
+ */
+export interface CloudData {
+  version: number
+  /** highest updatedAt of the contained items */
+  updatedAt: number
+  folders: Folder[]
+  notes: Note[]
+}
+
 export interface Note {
   id: string
   title: string

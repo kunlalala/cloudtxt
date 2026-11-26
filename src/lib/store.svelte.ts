@@ -1,5 +1,5 @@
-import { getMeta, loadAll, putFolders, putNotes, setMeta } from './db'
-import type { Folder, Note } from './types'
+import { getMeta, loadAll, putFolders, putNotes, replaceAllData, setMeta } from './db'
+import type { CloudData, Folder, Note } from './types'
 
 export const AUTOSAVE_MS = 400
 export const UNTITLED = 'Untitled'
@@ -43,6 +43,8 @@ class Store {
   tabSize = $state(4)
   /** whether the desktop outline panel is shown (remembered; phones use a drawer instead) */
   outlineOpen = $state(false)
+  /** when the local copy saved before the last Drive download was taken (0 = none) */
+  localBackupAt = $state(0)
 
   private pending = new Set<string>()
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -89,6 +91,7 @@ class Store {
     const savedFolds = (await getMeta<Record<string, number[]>>('folds')) ?? {}
     const live = new Set(this.liveNotes.map((n) => n.id))
     for (const id of Object.keys(savedFolds)) if (live.has(id)) this.folds[id] = savedFolds[id]
+    this.localBackupAt = (await getMeta<{ at: number } | null>('backupBeforeDownload'))?.at ?? 0
     if (sel && this.liveNotes.some((n) => n.id === sel)) this.selectedId = sel
     this.ready = true
     const note = this.selected
@@ -279,6 +282,50 @@ class Store {
     }
     if (!this.selected) this.selectedId = null
     this.saveUi()
+  }
+
+  // ---- cloud (Drive) ---------------------------------------------------
+  /** Everything that belongs in cloudtxt.json. Settings are deliberately excluded. */
+  snapshot(): CloudData {
+    const folders = $state.snapshot(this.folders) as Folder[]
+    const notes = $state.snapshot(this.notes) as Note[]
+    let updatedAt = 0
+    for (const f of folders) updatedAt = Math.max(updatedAt, f.updatedAt)
+    for (const n of notes) updatedAt = Math.max(updatedAt, n.updatedAt)
+    return { version: 1, updatedAt, folders, notes }
+  }
+
+  /** Replace everything with a copy from Drive (all writes in one transaction). */
+  async replaceAll(data: CloudData) {
+    await this.flush()
+    clearTimeout(this.timer)
+    this.pending.clear()
+    await replaceAllData(data.folders, data.notes)
+    this.folders = data.folders
+    this.notes = data.notes
+    this.folds = {}
+    this.foldsDirty = false
+    this.selectedId = null
+    this.activeFolderId = null
+    this.expanded = []
+    await setMeta('folds', {}).catch(reportError)
+    this.saveUi()
+  }
+
+  /** Keep the local data aside before a download replaces it. */
+  async saveLocalBackup() {
+    const at = Date.now()
+    await setMeta('backupBeforeDownload', { at, data: this.snapshot() })
+    this.localBackupAt = at
+  }
+
+  async restoreLocalBackup(): Promise<boolean> {
+    const saved = await getMeta<{ at: number; data: CloudData } | null>('backupBeforeDownload')
+    if (!saved) return false
+    await this.replaceAll(saved.data)
+    await setMeta('backupBeforeDownload', null)
+    this.localBackupAt = 0
+    return true
   }
 
   folderPath(id: string | null): string {
