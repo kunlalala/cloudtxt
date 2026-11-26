@@ -16,7 +16,7 @@ export interface HelpSection {
   blocks: Block[]
 }
 
-export const HELP_UPDATED = 'Stage 4 (Google sign-in, manual Drive upload/download)'
+export const HELP_UPDATED = 'Stage 5 (automatic sync between devices)'
 
 export const help: HelpSection[] = [
   {
@@ -106,13 +106,13 @@ export const help: HelpSection[] = [
         items: [
           'Sign in with Google: Google shows its own window and asks for one permission only — see and manage the files this app creates in your Drive (scope drive.appdata). It cannot see the rest of your Drive, Gmail or Photos.',
           'What is uploaded: every folder and every note, including items marked as deleted (a later sync needs those marks). Settings stay on each device: indent width, outline open/closed, folded lines and the sign-in token.',
-          'Upload to Drive: writes everything into cloudtxt.json in the app\'s hidden Drive folder. If a copy is already there, that old copy is saved first as cloudtxt.backup.json, so one upload can always be undone.',
-          'Download: replaces all folders and notes on this device with the Drive copy. It asks for confirmation first. The current local data is saved on the device before replacing it, and a "Restore it" line appears in the panel afterwards.',
+          'Automatic sync: once signed in, the app keeps both sides equal by itself (see the "Automatic sync" section). The panel has a switch to turn it off and a "Sync now" button.',
+          'Upload to Drive (manual override): writes this device\'s data into cloudtxt.json in the app\'s hidden Drive folder, replacing the older remote version (which is kept as a backup).',
+          'Download (manual override): replaces all folders and notes on this device with the Drive copy. It asks for confirmation first. The current local data is saved on the device before replacing it, and a "Restore it" line appears in the panel afterwards.',
           'The panel lists the files in the hidden folder with their modification time, and a Refresh button updates the list.',
           'Sign out forgets the token on this device and asks Google to revoke it. Your notes are not touched.',
           'The access token lasts about one hour. While you use the app it renews itself without a window when Google still remembers your consent; if it cannot, the status becomes "Session expired" and the panel offers "Sign in again". The token is kept in this browser only.',
-          'There is no automatic sync in this version: two devices do not merge by themselves and the last Upload wins. Upload on one device, then Download on the other.',
-          'Without a network the panel cannot do anything, but writing notes is never blocked.',
+          'Without a network the panel cannot do anything, but writing notes is never blocked; the next sync catches up when the connection returns.',
         ],
       },
       {
@@ -127,6 +127,38 @@ export const help: HelpSection[] = [
           '"The sign-in window was blocked": allow pop-ups for this site.',
           '"This build has no Google Client ID": the deployed build was made without the Client ID in src/lib/config.ts.',
         ],
+      },
+    ],
+  },
+  {
+    id: 'sync',
+    title: 'Automatic sync',
+    blocks: [
+      {
+        type: 'p',
+        text: 'After you sign in to Google, cloudtxt keeps this device and the Drive copy equal on its own. It merges note by note, so a change made on the phone is not lost when the computer uploads, and the other way round.',
+      },
+      {
+        type: 'p',
+        text: 'When it runs: about 5 seconds after you stop typing or after any change (new note, rename, move, delete), when the app starts, when you come back to the app, and when the network returns. A manual round is available any time with "Sync now" in the Google Drive panel.',
+      },
+      {
+        type: 'ul',
+        items: [
+          'The rule is last write wins per item: each folder and each note has its own updatedAt, and the newer version is kept. Two devices editing different notes simply both keep their work.',
+          'Deleting is a soft delete: the item is marked deleted instead of disappearing, so the other device deletes it too instead of bringing it back. After 30 days such a marker is removed for good.',
+          'Each round first downloads the Drive copy, merges, then uploads the result. The upload happens only when something actually changed.',
+          'Before the remote file is replaced, the previous content is saved in the hidden folder: cloudtxt.backup.json is always the last version, and the two older slots (cloudtxt.backup.1.json, cloudtxt.backup.2.json) are shifted on manual uploads and about every 10 minutes during automatic sync.',
+          'Typing is never interrupted. If the open note also changed on another device and you are not typing in it, the new text appears in place. If you are typing, nothing moves under your cursor: your text is newer and is sent up in the next round instead.',
+          'If a round fails (network, Google error, expired session) nothing is lost: the local data is untouched, the error appears in the panel, and the app retries with a growing delay (30 s up to 5 min). An expired session stops the retries until you sign in again.',
+          'Settings are never synced: indent width, outline open/closed, folded lines and the sign-in token stay on each device.',
+          'The switch in the panel turns automatic sync off (it is remembered on the device). "Sync now" still works while it is off.',
+          'When cloudtxt merges, a note whose folder was deleted elsewhere is hidden too, a note whose folder is gone for good is moved to the root, and folders that point at themselves in a loop are detached, so nothing becomes invisible.',
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Limits worth knowing: last write wins means that if the same note is edited on both devices at nearly the same time, one of the two texts is replaced (the newer one is kept, the older is still in the Drive backup files). Clock differences between devices can make an edit look newer than it is. There is no conflict dialog and no per-line merge.',
       },
     ],
   },
@@ -224,7 +256,7 @@ export const help: HelpSection[] = [
           'Deleting is a "soft delete": the item is only marked deleted: true and hidden. This is what later lets sync work correctly. There is no trash screen yet, so deleted items cannot be restored from the UI.',
           'Data belongs to one browser profile on one device at one address (origin). A different browser, a private window, a different device or a different address (for example localhost vs. a LAN IP) shows separate, empty data.',
           'Clearing "site data" / "cookies and site data" for this site deletes all notes. Copy anything important elsewhere until export is available.',
-          'If you are signed in to Google, the browser also stores the access token (meta key "driveToken") and, after a Download, the local safety copy (meta key "backupBeforeDownload"). Both are removed by clearing site data or by signing out.',
+          'If you are signed in to Google, the browser also stores the access token (meta key "driveToken"), the automatic-sync switch and the last sync time (autoSync, lastSyncAt) and, after a manual Download, the local safety copy (backupBeforeDownload). All of it is removed by clearing site data or by signing out.',
         ],
       },
     ],
@@ -464,7 +496,7 @@ export const help: HelpSection[] = [
       {
         type: 'ul',
         items: [
-          'Notes are written to this browser first, always. Nothing is sent anywhere until you open the Google Drive panel and press Upload.',
+          'Notes are written to this browser first, always. Nothing leaves the device until you sign in to Google; from then on, automatic sync sends the folder and note data to the app\'s private Drive folder in the background.',
           'The only network traffic is: loading the app (GitHub Pages), the Google sign-in script, and Drive requests you trigger. There is no analytics, no backend server and no third-party script besides Google sign-in.',
           'Google access is limited to the app-private Drive area (scope drive.appdata), which cannot see your other Drive files.',
           'Because data lives in the browser, it can be lost if site data is cleared, the browser profile is deleted, or the browser removes storage of sites it considers unused (some mobile browsers do this after a period of inactivity). Uploading a copy to Drive protects against that.',
@@ -487,7 +519,8 @@ export const help: HelpSection[] = [
           'Only headings and strong text are formatted; no italic, links, lists or code blocks, and no Markdown preview.',
           'On a phone there are no keyboard shortcuts for moving or duplicating lines, or for fold all / unfold all.',
           'No images.',
-          'No automatic sync between devices yet: Drive upload and download are manual, and the last Upload wins. There is no merging of two devices.',
+          'Sync is last write wins per note: there is no conflict dialog and no side-by-side merge, so an older edit of the same note can be replaced by a newer one from the other device (it stays in the Drive backup files for a while).',
+          'Sync needs a network and a Google sign-in; while offline only the local copy changes.',
           'Undo history is not kept after switching notes or reloading.',
           'Heading colours and sizes and the theme cannot be changed in settings (only the indent width can).',
         ],
@@ -504,8 +537,8 @@ export const help: HelpSection[] = [
           'Stage 1: local notes, folders, editor, IndexedDB, dark theme (done).',
           'Stage 2: installable app (PWA) with offline support, published on GitHub Pages (done).',
           'Stage 3: Google Cloud project, Drive API and OAuth client (done, outside the app).',
-          'Stage 4 (now): Google sign-in and manual upload/download through Drive appdata, with a backup before the remote copy is replaced.',
-          'Stage 5: automatic sync between devices, per note and folder, last write wins, soft deletes purged later.',
+          'Stage 4: Google sign-in and manual upload/download through Drive appdata, with a backup before the remote copy is replaced (done).',
+          'Stage 5 (now): automatic sync between devices, per note and folder, last write wins, soft deletes purged after 30 days, retries, backup rotation.',
           'Stage 6: images, compressed and stored separately and referenced from notes.',
         ],
       },
@@ -537,8 +570,11 @@ export const help: HelpSection[] = [
           'PWA updates: the service worker is registered in "prompt" mode, so a new version downloads in the background and waits instead of reloading under your fingers. The app checks on start, on visibilitychange (visible) and every hour. When the page becomes hidden, a waiting update is applied immediately after flushing pending edits, which makes normal use feel auto-updating; when the page is visible the "A new version is ready" banner is used instead. Tapping Update flushes, activates the new worker and reloads (controllerchange).',
           'Icons: public/icons/icon-192.png, icon-512.png and icon-maskable-512.png use the same artwork (the Vite logo on a white #ffffff background, logo inside the 80% maskable safe zone) and are declared "any maskable" / "maskable", so Android uses the whole picture as the adaptive icon instead of padding it onto a white tile. The white background is deliberate: launchers that draw their own white tile behind a legacy shortcut no longer show a visible frame. apple-touch-icon.png (180x180) is used by iOS. Installed icons are baked in at install time, so a changed icon only shows after the app is re-added.',
           'Google sign-in: Google Identity Services token model, loaded lazily (script accounts.google.com/gsi/client) only when the Drive panel is used, so the app start is unaffected. Scope is drive.appdata. The token client is created per request (initTokenClient) so each promise gets its own callback; silent renewal uses prompt "" and falls back to "Session expired" when Google needs a click.',
-          'Drive client (src/lib/drive.ts): plain fetch against Drive v3. Files are searched with spaces=appDataFolder and a name query; cloudtxt.json is created with a multipart upload and rewritten with an uploadType=media PATCH. The previous remote copy is written to cloudtxt.backup.json before the main file is replaced. 401 responses trigger one silent token renewal and a single retry.',
-          'Cloud data format: { version: 1, updatedAt, folders: [...], notes: [...] }. It is the full store including soft-deleted items; IDs are unchanged between devices so a later stage can merge item by item. Download normalizes the file (missing fields get defaults) and refuses anything without folders/notes arrays. Replacing local data is one IndexedDB transaction (clear + put), and the previous local data is stored under meta key backupBeforeDownload for manual restore.',
+          'Drive client (src/lib/drive.ts): plain fetch against Drive v3. Files are searched with spaces=appDataFolder and a name query; cloudtxt.json is created with a multipart upload and rewritten with an uploadType=media PATCH. keepBackup() stores the replaced content in cloudtxt.backup.json and, when rotating, shifts the older slots (backup.1, backup.2). 401 responses trigger one silent token renewal and a single retry (manual operations only).',
+          'Cloud data format: { version: 1, updatedAt, folders: [...], notes: [...] }. It is the full store including soft-deleted items; IDs are the same on every device, which is what makes an item-by-item merge possible. Download normalizes the file (missing fields get defaults) and refuses anything without folders/notes arrays. Replacing local data is one IndexedDB transaction (clear + put), and the previous local data is stored under meta key backupBeforeDownload for manual restore.',
+          'Merge (src/lib/merge.ts): pure function over two snapshots. Union of ids per store, winner is the item with the larger updatedAt (equal timestamps keep the local copy), then tombstones older than 30 days are dropped, folder parents are checked for missing ids and cycles, notes of a folder deleted elsewhere are marked deleted, and notes whose folder was purged move to the root. It returns stats (fromRemote / toRemote / purged) used for the panel summary.',
+          'Sync engine (src/lib/sync.svelte.ts): single-flight loop. Each round flushes pending edits, reads cloudtxt.json, merges, applies only the items that differ through one IndexedDB write each, then rewrites the remote file only when the merged result differs from it. A local change during the round sets a dirty flag, which defers the merge (never interrupts typing) and schedules another round. Triggers: 5 s debounce after local changes, app start, visibilitychange, online event; failures retry at 30 s doubling up to 5 min. Automatic rounds pass allowRefresh=false, so a stale token becomes "Session expired" instead of opening a Google window by itself.',
+          'Applying merged data (store.mergeIn) updates note objects in place, so the open note is not remounted; store.remoteStamp is bumped when the open note changed, and the editor replaces its document only when it does not have focus (otherwise the next round sends the newer local text). Local data is never replaced wholesale during sync, so selection, expanded folders and folds survive.',
           'Deployment: GitHub Actions (.github/workflows/static.yml) builds on every push to master and publishes dist to GitHub Pages. The site is served from the /cloudtxt/ path, which is the Vite base in vite.config.ts. The OAuth Client ID lives in src/lib/config.ts and must list the deployed origin plus http://localhost:5173 as authorized JavaScript origins.',
         ],
       },
@@ -562,6 +598,18 @@ export const help: HelpSection[] = [
           ['I cannot see the # marks', 'They are hidden when the cursor is on another line. Click on the heading line to show them.'],
           ['Cannot indent on phone', 'Soft keyboards often lack Tab. Paste a Tab character or use a hardware keyboard.'],
           ['Changes are not saved', 'Wait half a second after typing. If the browser blocks storage (some private modes), saving may fail; check the browser console for "IndexedDB write failed".'],
+          [
+            'Sync says "Session expired"',
+            'Google tokens last about an hour and renewal sometimes needs a click. Open the panel and press "Sign in again"; the next round catches up with everything written meanwhile.',
+          ],
+          [
+            'Sync does not happen',
+            'Check the panel: automatic sync switched off, no network ("Waiting for a network connection"), no Google session, or a red error. "Sync now" runs a round by hand; a failing round is retried automatically.',
+          ],
+          [
+            'A note came back after deleting it',
+            'Deleting is a soft delete that must travel to the other device. If the other device had no network at the time, it pushes its own copy back on reconnect, but the newer delete wins on the next round. Deleting on both sides, or waiting for one clean sync, avoids the flicker.',
+          ],
         ],
       },
     ],

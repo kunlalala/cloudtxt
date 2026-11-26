@@ -17,7 +17,11 @@ export const MAIN_FILE = 'cloudtxt.json'
 /** Previous remote version, written before the main file is overwritten. */
 export const BACKUP_FILE = 'cloudtxt.backup.json'
 
+/** Older versions, rotated so the last three remote snapshots are kept. */
+export const BACKUP_SLOTS = [BACKUP_FILE, 'cloudtxt.backup.1.json', 'cloudtxt.backup.2.json']
+
+/** During automatic sync the slots are only shifted this often, to keep API traffic small. */
+export const BACKUP_ROTATE_MS = 10 * 60 * 1000
+
 /** Google access tokens live about 1 hour; refresh a little earlier. */
 export const TOKEN_LIFETIME_MS = 55 * 60 * 1000
-
-

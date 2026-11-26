@@ -33,7 +33,7 @@ interface OAuth2Api {
   }) => TokenClient
 }
 
-class AuthError extends Error {
+export class AuthError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'AuthError'
@@ -100,7 +100,7 @@ function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? '' : 's'}`
 }
 
-function friendlyError(e: unknown): string {
+export function friendlyError(e: unknown): string {
   if (e instanceof AuthError) return e.message
   if (e instanceof DriveError) {
     if (e.status === 401) return 'Google sign-in expired. Sign in again.'
@@ -123,6 +123,11 @@ class Cloud {
   message = $state('')
   /** files currently in the app's hidden Drive folder */
   files = $state<drive.DriveFile[]>([])
+
+  /** true when a token (even a stale one) is kept, so background sync may try */
+  get hasSession() {
+    return !!this.token
+  }
 
   private token: TokenInfo | null = null
   private gis?: Promise<OAuth2Api>
@@ -199,7 +204,7 @@ class Cloud {
     await setMeta(META_KEY, this.token).catch(reportError)
   }
 
-  private async markExpired() {
+  async markExpired() {
     this.token = null
     this.status = 'expired'
     await setMeta(META_KEY, null).catch(reportError)
@@ -212,7 +217,7 @@ class Cloud {
     this.status = 'signed-in'
   }
 
-  private async withToken<T>(fn: (token: string) => Promise<T>, allowRefresh = true): Promise<T> {
+  async run<T>(fn: (token: string) => Promise<T>, allowRefresh = true): Promise<T> {
     if (!this.token || this.token.expiresAt <= Date.now() + 60_000) {
       if (!allowRefresh) throw new AuthError('Google sign-in expired. Sign in again.')
       await this.refreshToken()
@@ -277,7 +282,7 @@ class Cloud {
     if (!this.token) return
     if (!silent) this.busy = 'refresh'
     try {
-      this.files = await this.withToken((token) => drive.listFiles(token), !silent)
+      this.files = await this.run((token) => drive.listFiles(token), !silent)
       if (!silent && !this.files.length) this.message = `No ${MAIN_FILE} in Drive yet. Upload to create it.`
     } catch (e) {
       if (!silent) this.error = friendlyError(e)
@@ -299,16 +304,14 @@ class Cloud {
       await store.flush()
       const data = store.snapshot()
       const text = JSON.stringify(data)
-      const created = await this.withToken(async (token) => {
+      const created = await this.run(async (token) => {
         const existing = await drive.findFile(token, MAIN_FILE)
         if (!existing) {
           await drive.createFile(token, MAIN_FILE, text)
           return true
         }
         const previous = await drive.readText(token, existing.id)
-        const backup = await drive.findFile(token, BACKUP_FILE)
-        if (backup) await drive.updateFile(token, backup.id, previous)
-        else await drive.createFile(token, BACKUP_FILE, previous)
+        await drive.keepBackup(token, previous, true)
         await drive.updateFile(token, existing.id, text)
         return false
       })
@@ -335,7 +338,7 @@ class Cloud {
     this.error = ''
     this.message = ''
     try {
-      const data = await this.withToken(async (token) => {
+      const data = await this.run(async (token) => {
         const file = await drive.findFile(token, MAIN_FILE)
         if (!file) throw new DriveError(`There is no ${MAIN_FILE} in Drive yet. Upload first.`, 404)
         return parseCloudData(await drive.readText(token, file.id))
@@ -366,3 +369,4 @@ class Cloud {
 }
 
 export const cloud = new Cloud()
+

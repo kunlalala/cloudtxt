@@ -31,6 +31,7 @@
     noteId,
     content,
     tabSize,
+    remoteStamp,
     getFolds,
     onfolds,
     onoutline,
@@ -40,6 +41,8 @@
     noteId: string
     content: string
     tabSize: number
+    /** changes when a sync replaced this note's text from another device */
+    remoteStamp: number
     /** saved folded line numbers for a note */
     getFolds: (id: string) => number[]
     onfolds: (id: string, lines: number[]) => void
@@ -413,9 +416,32 @@
     const n = tabSize
     view?.dispatch({ effects: tabs.reconfigure(EditorState.tabSize.of(n)) })
   })
+
+  // Text that arrived from another device is shown only when the user is not typing in this
+  // note; if they are, the next sync round carries their text up instead.
+  function applyRemote() {
+    if (!view || host.contains(document.activeElement)) return
+    const next = untrack(() => content)
+    if (next === view.state.doc.toString()) return
+    const head = Math.min(view.state.selection.main.head, next.length)
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: next },
+      selection: { anchor: head },
+    })
+    emitOutline(view.state, true)
+    emitCursor(view.state, true)
+  }
+
+  let remoteSeen = untrack(() => remoteStamp)
+  $effect(() => {
+    const stamp = remoteStamp
+    if (stamp === remoteSeen) return
+    remoteSeen = stamp
+    applyRemote()
+  })
 </script>
 
-<div class="editor" bind:this={host}></div>
+<div class="editor" bind:this={host} onfocusout={() => setTimeout(applyRemote, 0)}></div>
 
 <style>
   .editor {

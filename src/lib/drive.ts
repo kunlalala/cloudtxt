@@ -3,6 +3,8 @@
  * Plain fetch calls, so there is no extra library to load or update.
  */
 
+import { BACKUP_SLOTS } from './config'
+
 const FILES = 'https://www.googleapis.com/drive/v3/files'
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files'
 const META_FIELDS = 'id,name,modifiedTime,size'
@@ -100,6 +102,31 @@ export async function createFile(token: string, name: string, text: string): Pro
   })
   if (!res.ok) throw await toError(res)
   return (await res.json()) as DriveFile
+}
+
+async function writeNamed(token: string, name: string, text: string): Promise<DriveFile> {
+  const existing = await findFile(token, name)
+  return existing ? await updateFile(token, existing.id, text) : await createFile(token, name, text)
+}
+
+async function readNamed(token: string, name: string): Promise<string | null> {
+  const file = await findFile(token, name)
+  return file ? await readText(token, file.id) : null
+}
+
+/**
+ * Keep the remote copy that is about to be replaced.
+ * Slot 0 always becomes `previous`; with rotate, the older slots shift down (only the last
+ * three snapshots survive), otherwise older slots stay as they are to save API calls.
+ */
+export async function keepBackup(token: string, previous: string, rotate: boolean) {
+  if (rotate) {
+    const older = await readNamed(token, BACKUP_SLOTS[0])
+    const oldest = await readNamed(token, BACKUP_SLOTS[1])
+    if (oldest !== null) await writeNamed(token, BACKUP_SLOTS[2], oldest)
+    if (older !== null) await writeNamed(token, BACKUP_SLOTS[1], older)
+  }
+  await writeNamed(token, BACKUP_SLOTS[0], previous)
 }
 
 /** Replace the content of an existing file. */

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { cloud } from './cloud.svelte'
+  import { sync } from './sync.svelte'
   import { store } from './store.svelte'
   import { BACKUP_FILE, MAIN_FILE } from './config'
 
@@ -12,6 +13,55 @@
     // silent: opening the panel must never trigger a Google pop-up by itself
     if (cloud.status === 'signed-in') void cloud.refreshFiles(true)
   })
+
+  function ago(ms: number) {
+    if (!ms) return ''
+    const s = Math.round((Date.now() - ms) / 1000)
+    if (s < 45) return 'just now'
+    if (s < 90) return '1 min ago'
+    if (s < 3600) return `${Math.round(s / 60)} min ago`
+    return `${Math.round(s / 3600)} h ago`
+  }
+
+  const syncText = $derived(
+    sync.state === 'syncing'
+      ? 'Syncing…'
+      : sync.state === 'waiting'
+        ? 'Waiting for a network connection'
+        : sync.state === 'error'
+          ? 'Sync failed'
+          : !sync.auto
+            ? 'Automatic sync is off'
+            : sync.lastSyncAt
+              ? `Synced ${ago(sync.lastSyncAt)}`
+              : 'Not synced yet',
+  )
+
+  async function signIn() {
+    await cloud.signIn()
+    if (cloud.status === 'signed-in') void sync.syncNow('manual')
+  }
+
+  async function upload() {
+    const resume = sync.pause()
+    try {
+      await cloud.uploadLocal()
+    } finally {
+      resume()
+      sync.refreshState()
+    }
+  }
+
+  async function download() {
+    confirming = false
+    const resume = sync.pause()
+    try {
+      await cloud.downloadRemote()
+    } finally {
+      resume()
+      sync.refreshState()
+    }
+  }
 
   const label = $derived(
     cloud.status === 'signed-in'
@@ -44,11 +94,6 @@
 
   function fmtTime(ms: number) {
     return ms ? new Date(ms).toLocaleString() : ''
-  }
-
-  async function download() {
-    confirming = false
-    await cloud.downloadRemote()
   }
 </script>
 
@@ -83,23 +128,39 @@
         Sign in with Google to upload a copy of your notes to the hidden app folder of your Drive. The rest of
         your Drive stays invisible to cloudtxt.
       </p>
-      <button
-        class="wide primary"
-        disabled={cloud.status === 'connecting'}
-        onclick={() => cloud.signIn()}
-      >
+      <button class="wide primary" disabled={cloud.status === 'connecting'} onclick={signIn}>
         {cloud.status === 'expired' ? 'Sign in again' : 'Sign in with Google'}
       </button>
     {:else}
+      <div class="synccard">
+        <div class="row">
+          <span class="sync-now">
+            <span class="dot" class:on={sync.state === 'syncing'} class:warn={sync.state === 'error'}></span>
+            {syncText}
+          </span>
+          <button disabled={!!cloud.busy || sync.state === 'syncing'} onclick={() => sync.syncNow('manual')}>
+            Sync now
+          </button>
+        </div>
+        <label class="toggle">
+          <input
+            type="checkbox"
+            checked={sync.auto}
+            onchange={(e) => sync.setAuto(e.currentTarget.checked)}
+          />
+          Sync automatically (after edits, on start, when back online)
+        </label>
+        {#if sync.summary}<p class="note">{sync.summary}</p>{/if}
+        {#if sync.error}<p class="error">{sync.error}</p>{/if}
+      </div>
       <div class="row">
-        <button class="primary" disabled={!!cloud.busy} onclick={() => cloud.uploadLocal()}>
-          Upload to Drive
-        </button>
+        <button class="primary" disabled={!!cloud.busy} onclick={upload}>Upload to Drive</button>
         <button disabled={!!cloud.busy} onclick={() => (confirming = true)}>Download</button>
       </div>
       <p class="note">
-        Upload writes this device's notes to <code>{MAIN_FILE}</code>. Before the file is replaced, the old Drive
-        copy is saved as <code>{BACKUP_FILE}</code>. Download replaces the notes on this device.
+        Automatic sync merges note by note, so both devices keep their changes. The two buttons below are the
+        manual override: Upload replaces the Drive copy with this device (the old copy is kept as
+        <code>{BACKUP_FILE}</code>), Download replaces this device with the Drive copy.
       </p>
       {#if confirming}
         <div class="confirm">
@@ -171,8 +232,8 @@
     {/if}
 
     <p class="note foot">
-      Signing in is optional: the app keeps working offline and without Google. Automatic sync between devices
-      is not part of this version, so use Upload / Download by hand.
+      Signing in is optional: the app keeps working offline and without Google. While signed in, changes go up
+      on their own; the manual buttons exist for the rare case when you want to force one direction.
     </p>
   </div>
 </div>
@@ -308,6 +369,61 @@
   .backup span {
     flex: 1;
     min-width: 160px;
+  }
+  .synccard {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px 10px 8px;
+    margin: 0 0 12px;
+  }
+  .synccard .row {
+    align-items: center;
+  }
+  .synccard .row button {
+    flex: none;
+    min-width: 96px;
+  }
+  .sync-now {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    min-height: 44px;
+  }
+  .sync-now .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex: none;
+  }
+  .sync-now .dot.on {
+    background: var(--accent);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  .sync-now .dot.warn {
+    background: #e6c07b;
+  }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    font-size: 0.85rem;
+    color: var(--fg);
+    cursor: pointer;
+  }
+  .toggle input {
+    width: 20px;
+    height: 20px;
+    flex: none;
+  }
+  @keyframes pulse {
+    50% {
+      opacity: 0.25;
+    }
   }
   .busy {
     color: var(--accent);

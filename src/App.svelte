@@ -12,6 +12,7 @@
   import { store, UNTITLED, TAB_SIZES } from './lib/store.svelte'
   import { pwa } from './lib/pwa.svelte'
   import { cloud } from './lib/cloud.svelte'
+  import { sync } from './lib/sync.svelte'
 
   let drawer = $state(false)
   let outlineDrawer = $state(false)
@@ -38,8 +39,12 @@
   }
 
   onMount(() => {
-    void store.init()
-    void cloud.init()
+    void (async () => {
+      await store.init()
+      await cloud.init()
+      sync.init()
+      if (cloud.hasSession) void sync.syncNow('start')
+    })()
     pwa.init()
     const flush = () => void store.flush()
     const onVis = () => document.visibilityState === 'hidden' && flush()
@@ -94,7 +99,8 @@
       <button
         class="cloud"
         class:on={cloud.status === 'signed-in'}
-        class:warn={cloud.status === 'expired'}
+        class:warn={cloud.status === 'expired' || sync.state === 'error'}
+        class:syncing={sync.state === 'syncing'}
         aria-label="Google Drive"
         title="Google Drive"
         onclick={() => (cloudOpen = true)}
@@ -131,6 +137,7 @@
             onoutline={(items) => (outline = items)}
             oncursor={(l) => (cursorLine = l)}
             onchange={(v) => store.edit(v)}
+            remoteStamp={store.remoteStamp}
           />
         </div>
         <!-- pointerdown is cancelled so the editor keeps focus and the keyboard stays open -->
@@ -276,6 +283,17 @@
     height: 7px;
     border-radius: 50%;
     background: currentColor;
+  }
+  .cloud.syncing {
+    color: var(--accent);
+  }
+  .cloud.syncing .dot {
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    50% {
+      opacity: 0.2;
+    }
   }
   @media (min-width: 768px) {
     .ol.on {

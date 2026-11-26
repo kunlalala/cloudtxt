@@ -52,6 +52,16 @@ export async function replaceAllData(folders: Folder[], notes: Note[]) {
   ])
 }
 
+/** Remove items for good (used when an old tombstone is purged). */
+export async function deleteData(folderIds: string[], noteIds: string[]) {
+  if (!folderIds.length && !noteIds.length) return
+  const d = await db()
+  const tx = d.transaction(['folders', 'notes'], 'readwrite')
+  const folderStore = tx.objectStore('folders')
+  const noteStore = tx.objectStore('notes')
+  await Promise.all([...folderIds.map((id) => folderStore.delete(id)), ...noteIds.map((id) => noteStore.delete(id)), tx.done])
+}
+
 export async function getMeta<T>(key: string): Promise<T | undefined> {
   return (await (await db()).get('meta', key)) as T | undefined
 }

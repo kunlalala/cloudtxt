@@ -1,4 +1,5 @@
-import { getMeta, loadAll, putFolders, putNotes, replaceAllData, setMeta } from './db'
+import { deleteData, getMeta, loadAll, putFolders, putNotes, replaceAllData, setMeta } from './db'
+import { sameFolder, sameNote } from './merge'
 import type { CloudData, Folder, Note } from './types'
 
 export const AUTOSAVE_MS = 400
@@ -45,6 +46,10 @@ class Store {
   outlineOpen = $state(false)
   /** when the local copy saved before the last Drive download was taken (0 = none) */
   localBackupAt = $state(0)
+  /** bumped when a sync replaced the text of the open note, so the editor can show it */
+  remoteStamp = $state(0)
+
+  private listeners = new Set<(kind: 'local' | 'remote') => void>()
 
   private pending = new Set<string>()
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -103,6 +108,17 @@ class Store {
     setMeta('expanded', $state.snapshot(this.expanded)).catch(reportError)
   }
 
+  // ---- change notifications (used by background sync) -----------------
+  /** Subscribe to data changes. 'local' = user action, 'remote' = data applied by a sync. */
+  onChange(fn: (kind: 'local' | 'remote') => void) {
+    this.listeners.add(fn)
+    return () => this.listeners.delete(fn)
+  }
+
+  private notify(kind: 'local' | 'remote') {
+    for (const fn of [...this.listeners]) fn(kind)
+  }
+
   // ---- settings -------------------------------------------------------
   setTabSize(n: number) {
     if (!TAB_SIZES.includes(n)) return
@@ -150,6 +166,7 @@ class Store {
     this.pending.add(n.id)
     clearTimeout(this.timer)
     this.timer = setTimeout(() => void this.flush(), AUTOSAVE_MS)
+    this.notify('local')
   }
 
   async flush() {
@@ -197,6 +214,7 @@ class Store {
     this.folders.push(f)
     if (parentId) this.setOpen(parentId, true)
     putFolders([f]).catch(reportError)
+    this.notify('local')
   }
 
   addNote(folderId: string | null = this.activeFolderId) {
@@ -205,6 +223,7 @@ class Store {
     if (folderId) this.setOpen(folderId, true)
     putNotes([$state.snapshot(n) as Note]).catch(reportError)
     this.select(n.id)
+    this.notify('local')
   }
 
   rename(kind: Kind, id: string, name: string) {
@@ -215,6 +234,7 @@ class Store {
       f.name = name
       f.updatedAt = Date.now()
       putFolders([f]).catch(reportError)
+      this.notify('local')
     } else {
       const n = this.notes.find((x) => x.id === id)
       if (!n) return
@@ -223,6 +243,7 @@ class Store {
       n.title = name || deriveTitle(n.content)
       n.updatedAt = Date.now()
       putNotes([$state.snapshot(n) as Note]).catch(reportError)
+      this.notify('local')
     }
   }
 
@@ -258,6 +279,7 @@ class Store {
       putNotes([$state.snapshot(n) as Note]).catch(reportError)
     }
     if (target) this.setOpen(target, true)
+    this.notify('local')
   }
 
   /** Soft delete; a folder takes its subfolders and notes with it. */
@@ -282,6 +304,7 @@ class Store {
     }
     if (!this.selected) this.selectedId = null
     this.saveUi()
+    this.notify('local')
   }
 
   // ---- cloud (Drive) ---------------------------------------------------
@@ -310,6 +333,68 @@ class Store {
     this.expanded = []
     await setMeta('folds', {}).catch(reportError)
     this.saveUi()
+    this.notify('remote')
+  }
+
+  /**
+   * Apply a merged snapshot without disturbing the UI (selection, expanded folders, folds).
+   * Only the items that differ are written to IndexedDB.
+   */
+  async mergeIn(data: CloudData): Promise<number> {
+    const folderById = new Map(this.folders.map((f) => [f.id, f]))
+    const noteById = new Map(this.notes.map((n) => [n.id, n]))
+
+    const changedFolders = data.folders.filter((f) => {
+      const cur = folderById.get(f.id)
+      return !cur || !sameFolder(cur, f)
+    })
+    const changedNotes = data.notes.filter((n) => {
+      const cur = noteById.get(n.id)
+      return !cur || !sameNote(cur, n)
+    })
+    const mergedFolderIds = new Set(data.folders.map((f) => f.id))
+    const mergedNoteIds = new Set(data.notes.map((n) => n.id))
+    const removedFolderIds = this.folders.filter((f) => !mergedFolderIds.has(f.id)).map((f) => f.id)
+    const removedNoteIds = this.notes.filter((n) => !mergedNoteIds.has(n.id)).map((n) => n.id)
+
+    if (!changedFolders.length && !changedNotes.length && !removedFolderIds.length && !removedNoteIds.length) return 0
+
+    const selected = this.selected
+    const selectedChanged = !!selected && changedNotes.some((n) => n.id === selected.id)
+
+    // apply in memory first, with no await in between, so a keystroke cannot slip into the middle
+    for (const f of changedFolders) {
+      const cur = folderById.get(f.id)
+      if (cur) Object.assign(cur, f)
+      else this.folders.push({ ...f })
+    }
+    for (const n of changedNotes) {
+      const cur = noteById.get(n.id)
+      if (cur) Object.assign(cur, n)
+      else this.notes.push({ ...n })
+    }
+    if (removedFolderIds.length) this.folders = this.folders.filter((f) => mergedFolderIds.has(f.id))
+    if (removedNoteIds.length) {
+      this.notes = this.notes.filter((n) => mergedNoteIds.has(n.id))
+      if (this.selectedId && !mergedNoteIds.has(this.selectedId)) {
+        this.selectedId = null
+        this.saveUi()
+      }
+    }
+    if (selectedChanged) this.remoteStamp++
+
+    try {
+      if (changedFolders.length) await putFolders(changedFolders.map((f) => ({ ...f })))
+      if (changedNotes.length) await putNotes(changedNotes.map((n) => ({ ...n })))
+      if (removedFolderIds.length || removedNoteIds.length) await deleteData(removedFolderIds, removedNoteIds)
+    } catch (e) {
+      reportError(e)
+    }
+    // text typed while the merge was being written must win over the merged copy
+    if (this.pending.size) void this.flush()
+
+    this.notify('remote')
+    return changedFolders.length + changedNotes.length
   }
 
   /** Keep the local data aside before a download replaces it. */

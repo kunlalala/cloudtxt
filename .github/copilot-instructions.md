@@ -21,7 +21,8 @@ Google Identity Services、Drive API v3、vite-plugin-pwa。
 
 - Images are compressed and stored separately; the main JSON only stores references to `img:id`.
 
-- Synchronization uses `last-write-wins` (press `updatedAt`), and a backup is made before overwriting.
+- Synchronization uses `last-write-wins` (per item `updatedAt`), and the replaced remote copy is kept
+  in `cloudtxt.backup.json` (three rotating slots) before overwriting.
 
 - No heavy libraries are used to maintain fast startup.
 
@@ -39,6 +40,11 @@ notes: [{id,title,content,folderId,updatedAt,deleted?}] }
 Delete via soft delete (deleted: true), otherwise it will "revive" during synchronization.
 
 ## Current Stage
-Stage 4 (local notes + PWA on GitHub Pages + Google sign-in and manual Drive upload/download).
-The OAuth Client ID lives in `src/lib/config.ts` (public value, empty until pasted). Automatic sync,
-merging and images are not implemented yet.
+Stage 5 (local notes + PWA on GitHub Pages + Google sign-in + automatic merge sync through Drive).
+The OAuth Client ID lives in `src/lib/config.ts` (public value, empty until pasted). Images (Stage 6)
+are not implemented yet.
+
+Sync rules in code: `src/lib/merge.ts` merges per item by `updatedAt` (equal timestamps keep the
+local copy) and keeps soft deletes as tombstones for 30 days; `src/lib/sync.svelte.ts` downloads,
+merges, applies and only then uploads, debounced 5 s, with retries and a dirty flag so a round never
+interrupts typing. Automatic rounds must never open a Google window (allowRefresh = false).
