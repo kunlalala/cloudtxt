@@ -5,6 +5,7 @@
     Decoration,
     EditorView,
     ViewPlugin,
+    WidgetType,
     keymap,
     lineNumbers,
     highlightActiveLine,
@@ -26,6 +27,7 @@
     bracketMatching,
   } from '@codemirror/language'
   import { HEADING_RE, HEADING_COLORS, HEADING_SIZES, STRONG_COLOR, strongRegex, outlineOf, type OutlineItem } from './headings'
+  import { imageUrl } from './images'
 
   let {
     noteId,
@@ -37,6 +39,9 @@
     onoutline,
     oncursor,
     onchange,
+    onimagefiles,
+    onimageopen,
+    onimagemissing,
   }: {
     noteId: string
     content: string
@@ -51,6 +56,12 @@
     /** line number (1-based) of the cursor; called when it changes */
     oncursor: (line: number) => void
     onchange: (v: string) => void
+    /** images pasted or dropped into the editor */
+    onimagefiles: (files: File[]) => void
+    /** the user clicked an image, show it large */
+    onimageopen: (id: string) => void
+    /** a token points at an image this device does not have (yet) */
+    onimagemissing: () => void
   } = $props()
 
   let host: HTMLDivElement
@@ -245,6 +256,114 @@
     { decorations: (v) => v.decorations },
   )
 
+  /**
+   * Images: [[img:<id>]] is replaced by the picture itself, except on the line being edited, so
+   * the token can be deleted or copied like ordinary text.
+   */
+  /** ids already reported as missing, so scrolling does not schedule sync over and over */
+  const reportedMissing = new Set<string>()
+
+  class ImageWidget extends WidgetType {
+    id: string
+    open: (id: string) => void
+
+    constructor(id: string, open: (id: string) => void) {
+      super()
+      this.id = id
+      this.open = open
+    }
+    eq(other: ImageWidget) {
+      return other.id === this.id
+    }
+    toDOM() {
+      const box = document.createElement('span')
+      box.className = 'cm-img'
+      const img = document.createElement('img')
+      img.alt = 'image'
+      img.decoding = 'async'
+      img.loading = 'lazy'
+      img.addEventListener('click', (e) => {
+        e.preventDefault()
+        this.open(this.id)
+      })
+      box.appendChild(img)
+      void imageUrl(this.id).then((url) => {
+        if (url) img.src = url
+        else {
+          box.textContent = '[image not available]'
+          box.classList.add('cm-img-missing')
+          if (!reportedMissing.has(this.id)) {
+            reportedMissing.add(this.id)
+            onimagemissing()
+          }
+        }
+      })
+      return box
+    }
+    /** let the widget keep the click instead of the editor moving the cursor onto the line */
+    ignoreEvent() {
+      return true
+    }
+  }
+
+  const images = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+      constructor(view: EditorView) {
+        this.decorations = this.build(view)
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.viewportChanged || u.selectionSet) this.decorations = this.build(u.view)
+      }
+      build(view: EditorView) {
+        const b = new RangeSetBuilder<Decoration>()
+        const { doc, selection } = view.state
+        let last = -1
+        for (const { from, to } of view.visibleRanges) {
+          for (let pos = from; pos <= to; ) {
+            const line = doc.lineAt(pos)
+            pos = line.to + 1
+            if (line.from <= last) continue
+            last = line.from
+            if (selection.ranges.some((r) => r.from <= line.to && r.to >= line.from)) continue
+            for (const m of line.text.matchAll(/\[\[img:([a-z0-9]+)\]\]/gi)) {
+              const start = line.from + (m.index ?? 0)
+              b.add(start, start + m[0].length, Decoration.replace({ widget: new ImageWidget(m[1], openImage) }))
+            }
+          }
+        }
+        return b.finish()
+      }
+    },
+    { decorations: (v) => v.decorations },
+  )
+
+  function openImage(id: string) {
+    onimageopen(id)
+  }
+
+  /** pick image files out of a clipboard or drop event */
+  function imageFiles(list: FileList | null | undefined): File[] {
+    return list ? [...list].filter((f) => f.type.startsWith('image/')) : []
+  }
+
+  const imagePaste = EditorView.domEventHandlers({
+    paste: (event) => {
+      const files = imageFiles(event.clipboardData?.files)
+      if (!files.length) return false
+      event.preventDefault()
+      onimagefiles(files)
+      return true
+    },
+    drop: (event) => {
+      const files = imageFiles(event.dataTransfer?.files)
+      if (!files.length) return false
+      event.preventDefault()
+      onimagefiles(files)
+      return true
+    },
+  })
+
   const theme = EditorView.theme(
     {
       '&': { height: '100%', color: 'var(--fg)', backgroundColor: 'var(--bg)' },
@@ -254,6 +373,16 @@
       '.cm-line': { padding: '0 12px', overflowWrap: 'anywhere' },
       '.cm-h': { fontWeight: '700' },
       '.cm-strong': { color: STRONG_COLOR, fontWeight: '700' },
+      '.cm-img': { display: 'inline-block', maxWidth: '100%', verticalAlign: 'middle' },
+      '.cm-img img': {
+        display: 'block',
+        maxWidth: '100%',
+        maxHeight: '60vh',
+        borderRadius: '8px',
+        border: '1px solid var(--border)',
+        cursor: 'zoom-in',
+      },
+      '.cm-img-missing': { color: '#ff6b6b', fontSize: '0.9em' },
       '.cm-lead': { fontSize: 'var(--ed-size)', fontWeight: '400', whiteSpace: 'pre' },
       '.cm-h1': { fontSize: HEADING_SIZES[0], color: HEADING_COLORS[0] },
       '.cm-h2': { fontSize: HEADING_SIZES[1], color: HEADING_COLORS[1] },
@@ -307,6 +436,8 @@
         Prec.high(indentFold),
         headings,
         strong,
+        images,
+        imagePaste,
         layout,
         theme,
         keymap.of([indentWithTab, ...foldKeymap, ...historyKeymap, ...defaultKeymap]),
@@ -439,6 +570,18 @@
     remoteSeen = stamp
     applyRemote()
   })
+
+  /** Insert text (an image token) at the cursor, keeping focus in the editor. */
+  export function insertText(text: string) {
+    if (!view) return
+    const sel = view.state.selection.main
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: text },
+      selection: { anchor: sel.from + text.length },
+      scrollIntoView: true,
+    })
+    view.focus()
+  }
 </script>
 
 <div class="editor" bind:this={host} onfocusout={() => setTimeout(applyRemote, 0)}></div>

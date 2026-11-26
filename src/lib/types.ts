@@ -18,6 +18,19 @@ export interface CloudData {
   notes: Note[]
 }
 
+/** A compressed image kept in IndexedDB; notes refer to it as [[img:<id>]]. */
+export interface StoredImage {
+  id: string
+  blob: Blob
+  /** always image/jpeg after compression */
+  type: string
+  width: number
+  height: number
+  /** bytes of the stored blob */
+  size: number
+  createdAt: number
+}
+
 export interface Note {
   id: string
   title: string

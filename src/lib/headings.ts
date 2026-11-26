@@ -25,7 +25,11 @@ export function outlineOf(lines: { count: number; text: (n: number) => string })
     if (!raw.includes('#')) continue
     const m = HEADING_RE.exec(raw)
     if (!m) continue
-    const text = raw.slice(m[0].length).replace(strongRegex(), '$1').trim()
+    const text = raw
+      .slice(m[0].length)
+      .replace(strongRegex(), '$1')
+      .replace(/\[\[img:[a-z0-9]+\]\]/gi, ' ')
+      .trim()
     if (text) items.push({ line: n, level: m[2].length, text })
   }
   return items

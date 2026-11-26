@@ -18,7 +18,7 @@ export interface GuideSection {
   steps: GuideStep[]
 }
 
-export const GUIDE_UPDATED = 'Stage 5 (automatic sync between devices)'
+export const GUIDE_UPDATED = 'Stage 6 (images)'
 
 export const guide: GuideSection[] = [
   {
@@ -60,7 +60,7 @@ export const guide: GuideSection[] = [
         id: 'drive-data',
         title: 'Delete every file in Drive appdata',
         detail:
-          'The app stores cloudtxt.json (all folders and notes) and up to three older versions (cloudtxt.backup.json, cloudtxt.backup.1.json, cloudtxt.backup.2.json) in its hidden app folder. Images will be added later as img_<id>.jpg. Remove them with Google Drive → Settings → Manage apps → cloudtxt → "Delete hidden app data" (this removes the whole hidden folder, which is the cleanest option). The files are not visible in the normal Drive file list.',
+          'The app stores cloudtxt.json (all folders and notes), up to three older versions (cloudtxt.backup.json, cloudtxt.backup.1.json, cloudtxt.backup.2.json) and the compressed pictures (img_<id>.jpg) in its hidden app folder. Remove them with Google Drive → Settings → Manage apps → cloudtxt → "Delete hidden app data" (this removes the whole hidden folder, which is the cleanest option). The files are not visible in the normal Drive file list.',
         status: 'active',
       },
       {
@@ -105,7 +105,7 @@ export const guide: GuideSection[] = [
         id: 'local-idb',
         title: 'Clear IndexedDB in the browser',
         detail:
-          'Do this in every browser / device you used: browser settings → privacy → site data → find this site → delete; or DevTools → Application → Storage → Clear site data. The database name is cloudtxt; besides folders and notes it holds the meta store, which includes the stored Google access token (driveToken), the sync settings (autoSync, lastSyncAt) and the local safety copy made before a manual Drive download (backupBeforeDownload). On an installed app, sign out in the Drive panel first so the token is revoked, then clear the site data.',
+          'Do this in every browser / device you used: browser settings → privacy → site data → find this site → delete; or DevTools → Application → Storage → Clear site data. The database name is cloudtxt; besides folders and notes it holds the meta store (stored Google access token driveToken, sync settings autoSync/lastSyncAt, the local safety copy backupBeforeDownload) and the images store with every compressed picture. On an installed app, sign out in the Drive panel first so the token is revoked, then clear the site data.',
         status: 'active',
       },
       {

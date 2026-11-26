@@ -48,7 +48,11 @@
       await cloud.uploadLocal()
     } finally {
       resume()
-      sync.refreshState()
+    }
+    sync.refreshState()
+    if (!cloud.error) {
+      sync.imagesChanged()
+      void sync.syncNow('manual')
     }
   }
 
@@ -59,7 +63,11 @@
       await cloud.downloadRemote()
     } finally {
       resume()
-      sync.refreshState()
+    }
+    sync.refreshState()
+    if (!cloud.error) {
+      sync.imagesChanged()
+      void sync.syncNow('manual')
     }
   }
 

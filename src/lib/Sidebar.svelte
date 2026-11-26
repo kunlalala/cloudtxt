@@ -2,12 +2,13 @@
   import { store, type Kind, type Row } from './store.svelte'
   import type { DialogState } from './dialog'
 
-  let { open, ondialog, onclosedrawer, onguide, onhelp }: {
+  let { open, ondialog, onclosedrawer, onguide, onhelp, onimage }: {
     open: boolean
     ondialog: (d: DialogState) => void
     onclosedrawer: () => void
     onguide: () => void
     onhelp: () => void
+    onimage: () => void
   } = $props()
 
   function newNote() {
@@ -72,6 +73,7 @@
   <div class="head">
     <button class="primary" onclick={newNote}>＋ Note</button>
     <button onclick={() => newFolder(store.activeFolderId)}>＋ Folder</button>
+    <button onclick={onimage} title="Insert an image into the open note">＋ Image</button>
   </div>
   <div class="path">{store.activeFolderId ? store.folderPath(store.activeFolderId) : 'Root'}</div>
   <nav>

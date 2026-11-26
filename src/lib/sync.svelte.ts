@@ -5,11 +5,12 @@
  */
 import { AuthError, cloud, friendlyError, parseCloudData } from './cloud.svelte'
 import { BACKUP_ROTATE_MS, MAIN_FILE } from './config'
-import { getMeta, setMeta } from './db'
+import { deleteImages, getMeta, listImages, putImage, setMeta } from './db'
 import * as drive from './drive'
+import { forgetImageUrl, IMAGE_GRACE_MS, imageIdsIn } from './images'
 import { mergeCloudData, sameCloudData, type MergeStats } from './merge'
 import { store } from './store.svelte'
-import type { CloudData } from './types'
+import type { CloudData, StoredImage } from './types'
 
 export type SyncState = 'off' | 'idle' | 'syncing' | 'waiting' | 'error'
 
@@ -38,6 +39,9 @@ class Sync {
   private timer: ReturnType<typeof setTimeout> | undefined
   private running: Promise<void> | null = null
   private dirty = false
+  /** set when an image was added locally, cleared after a successful image round */
+  imagesDirty = false
+  private imagesSynced = false
   private retries = 0
   private paused = 0
   private lastRotateAt = 0
@@ -99,6 +103,12 @@ class Sync {
     this.schedule(500)
   }
 
+  /** an image was added here: send it on the next round instead of waiting for the debounce */
+  imagesChanged() {
+    this.imagesDirty = true
+    this.schedule(1500)
+  }
+
   /** pause automatic rounds while a manual Drive operation runs */
   pause() {
     this.paused++
@@ -147,10 +157,12 @@ class Sync {
         return file
       }, manual)
 
+      let touched = false
       if (!remoteFile || remoteText === null) {
         // nothing in Drive yet: publish this device as the first copy
         await this.writeRemote(store.snapshot(), null, manual)
         this.summary = 'Created the Drive copy from this device.'
+        touched = true
       } else {
         const remote = parseCloudData(remoteText)
         const { data, stats } = mergeCloudData(local, remote)
@@ -164,8 +176,18 @@ class Sync {
         }
 
         const applied = await store.mergeIn(data)
-        if (!sameCloudData(data, remote)) await this.writeRemote(data, remoteText, manual)
+        if (!sameCloudData(data, remote)) {
+          await this.writeRemote(data, remoteText, manual)
+          touched = true
+        }
+        if (applied) touched = true
         this.summary = describe(stats, applied)
+      }
+
+      // images travel separately: only the ones a note mentions, only the missing ones
+      if (touched || this.imagesDirty || !this.imagesSynced) {
+        const images = await this.syncImages(manual)
+        if (images) this.summary = `${this.summary} · ${images}`.replace('Everything up to date. · ', '')
       }
 
       this.retries = 0
@@ -194,6 +216,91 @@ class Sync {
     } finally {
       if (this.state === 'syncing') this.state = 'idle'
     }
+  }
+
+  /**
+   * Images live beside the note file (img_<id>.jpg). Upload the referenced ones Drive lacks,
+   * download the referenced ones this device lacks, and drop images no note mentions any more
+   * after the grace period.
+   */
+  private async syncImages(manual: boolean): Promise<string> {
+    const referenced = new Set<string>()
+    for (const note of store.notes) for (const id of imageIdsIn(note.content)) referenced.add(id)
+    const local = await listImages()
+    const localIds = new Set(local.map((image) => image.id))
+    let uploaded = 0
+    let downloaded = 0
+    let removed = 0
+    let failed = 0
+
+    await cloud.run(async (token) => {
+      const files = await drive.listFiles(token)
+      const remote = new Map(files.map((file) => [file.name, file]))
+
+      for (const image of local) {
+        if (!referenced.has(image.id) || remote.has(`img_${image.id}.jpg`)) continue
+        try {
+          await drive.createBinaryFile(token, `img_${image.id}.jpg`, image.blob, image.type || 'image/jpeg')
+          uploaded++
+        } catch (e) {
+          failed++
+          console.error('[cloudtxt] image upload failed', e)
+        }
+      }
+
+      for (const id of referenced) {
+        if (localIds.has(id)) continue
+        const file = remote.get(`img_${id}.jpg`)
+        if (!file) continue
+        try {
+          const blob = await drive.readBlob(token, file.id)
+          const bitmap = await createImageBitmap(blob)
+          const stored: StoredImage = {
+            id,
+            blob,
+            type: 'image/jpeg',
+            width: bitmap.width,
+            height: bitmap.height,
+            size: blob.size,
+            createdAt: file.modifiedTime ? Date.parse(file.modifiedTime) || Date.now() : Date.now(),
+          }
+          bitmap.close?.()
+          await putImage(stored)
+          downloaded++
+        } catch (e) {
+          failed++
+          console.error('[cloudtxt] image download failed', e)
+        }
+      }
+
+      const cutoff = Date.now() - IMAGE_GRACE_MS
+      const orphans = local.filter((image) => !referenced.has(image.id) && image.createdAt < cutoff)
+      if (orphans.length) {
+        await deleteImages(orphans.map((image) => image.id))
+        for (const image of orphans) {
+          forgetImageUrl(image.id)
+          const file = remote.get(`img_${image.id}.jpg`)
+          if (!file) continue
+          try {
+            await drive.deleteFile(token, file.id)
+            removed++
+          } catch {
+            // try again next round
+          }
+        }
+      }
+    }, manual)
+
+    // a failed image is retried on the next round instead of being forgotten
+    this.imagesDirty = failed > 0
+    this.imagesSynced = true
+
+    const parts: string[] = []
+    if (uploaded) parts.push(`${uploaded} image${uploaded === 1 ? '' : 's'} uploaded`)
+    if (downloaded) parts.push(`${downloaded} image${downloaded === 1 ? '' : 's'} downloaded`)
+    if (removed) parts.push(`${removed} unused image${removed === 1 ? '' : 's'} removed`)
+    if (failed) parts.push(`${failed} image${failed === 1 ? '' : 's'} could not be synced`)
+    return parts.join(', ')
   }
 
   private async writeRemote(data: CloudData, previous: string | null, manual: boolean) {

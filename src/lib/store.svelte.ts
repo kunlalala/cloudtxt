@@ -1,4 +1,5 @@
 import { deleteData, getMeta, loadAll, putFolders, putNotes, replaceAllData, setMeta } from './db'
+import { stripImageTokens } from './images'
 import { sameFolder, sameNote } from './merge'
 import type { CloudData, Folder, Note } from './types'
 
@@ -23,7 +24,7 @@ function newId() {
 
 function deriveTitle(content: string) {
   for (const line of content.split('\n', 20)) {
-    const t = line.replace(/^\s*#+\s*/, '').trim()
+    const t = stripImageTokens(line.replace(/^\s*#+\s*/, '')).trim()
     if (t) return t.slice(0, 80)
   }
   return ''

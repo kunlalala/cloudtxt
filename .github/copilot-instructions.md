@@ -19,7 +19,8 @@ Google Identity Services、Drive API v3、vite-plugin-pwa。
 
 - Notes are stored as plain text. No Markdown: the only formatting is the custom heading syntax (a line starting, after optional indentation, with 1-6 `#` followed by a space), shown bigger/coloured with the `#` hidden off the cursor line, and the strong syntax `!!text!!` (red, bold, marks hidden off the cursor line). Do not add Markdown libraries.
 
-- Images are compressed and stored separately; the main JSON only stores references to `img:id`.
+- Images are compressed (canvas, max edge 1600, JPEG 0.8) and stored separately; the note text only
+  stores the token `[[img:<id>]]` and Drive gets `img_<id>.jpg`.
 
 - Synchronization uses `last-write-wins` (per item `updatedAt`), and the replaced remote copy is kept
   in `cloudtxt.backup.json` (three rotating slots) before overwriting.
@@ -40,9 +41,13 @@ notes: [{id,title,content,folderId,updatedAt,deleted?}] }
 Delete via soft delete (deleted: true), otherwise it will "revive" during synchronization.
 
 ## Current Stage
-Stage 5 (local notes + PWA on GitHub Pages + Google sign-in + automatic merge sync through Drive).
-The OAuth Client ID lives in `src/lib/config.ts` (public value, empty until pasted). Images (Stage 6)
-are not implemented yet.
+Stage 6 (local notes + PWA on GitHub Pages + Google sign-in + automatic merge sync + images).
+The OAuth Client ID lives in `src/lib/config.ts` (public value, empty until pasted).
+
+Images: compressed with canvas (max edge 1600, JPEG 0.8), stored in the IndexedDB `images` store and
+in Drive as `img_<id>.jpg`, referenced from note text with the custom token `[[img:<id>]]` (never
+Markdown). Only referenced images are uploaded, only missing ones are downloaded, and pictures no
+note mentions for 30 days are removed on both sides.
 
 Sync rules in code: `src/lib/merge.ts` merges per item by `updatedAt` (equal timestamps keep the
 local copy) and keeps soft deletes as tombstones for 30 days; `src/lib/sync.svelte.ts` downloads,

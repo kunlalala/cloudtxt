@@ -16,7 +16,7 @@ export interface HelpSection {
   blocks: Block[]
 }
 
-export const HELP_UPDATED = 'Stage 5 (automatic sync between devices)'
+export const HELP_UPDATED = 'Stage 6 (images)'
 
 export const help: HelpSection[] = [
   {
@@ -243,7 +243,7 @@ export const help: HelpSection[] = [
       },
       {
         type: 'p',
-        text: 'Where the data is: an IndexedDB database named "cloudtxt" with three stores: folders, notes and meta (UI state such as the last opened note, the indent width, the folded lines of each note and the delete-guide checklist).',
+        text:         'Where the data is: an IndexedDB database named "cloudtxt" with four stores: folders, notes, meta (UI state such as the last opened note, the indent width, the folded lines of each note and the delete-guide checklist) and images (the compressed pictures).',
       },
       {
         type: 'code',
@@ -252,7 +252,7 @@ export const help: HelpSection[] = [
       {
         type: 'ul',
         items: [
-          'Notes are stored as plain text in the content field. Headings are just lines that start with #; the text is never converted.',
+          'Notes are stored as plain text in the content field. Headings are just lines that start with #; the text is never converted. Pictures are referenced by a token such as [[img:mwx44oqih9o4v3]], which is plain text too.',
           'Deleting is a "soft delete": the item is only marked deleted: true and hidden. This is what later lets sync work correctly. There is no trash screen yet, so deleted items cannot be restored from the UI.',
           'Data belongs to one browser profile on one device at one address (origin). A different browser, a private window, a different device or a different address (for example localhost vs. a LAN IP) shows separate, empty data.',
           'Clearing "site data" / "cookies and site data" for this site deletes all notes. Copy anything important elsewhere until export is available.',
@@ -350,6 +350,40 @@ export const help: HelpSection[] = [
       {
         type: 'code',
         text: '# Trip plan\n\t## Day 1\n\t\tmorning: airport\n\t\tevening: hotel\n\t## Day 2\n\t\tmuseum',
+      },
+    ],
+  },
+  {
+    id: 'images',
+    title: 'Images',
+    blocks: [
+      {
+        type: 'p',
+        text: 'A note can contain pictures. Because cloudtxt has no Markdown, an image is a plain token in the text: [[img:<id>]] — you never type it by hand, the app writes it.',
+      },
+      {
+        type: 'p',
+        text: 'Ways to add one: press Ctrl+V (or long-press → Paste on a phone) with a picture in the clipboard, drop an image file on the editor, or use "＋ Image" in the sidebar (also the picture button in the phone toolbar). The picture is compressed, stored and its token is inserted where the cursor is.',
+      },
+      {
+        type: 'ul',
+        items: [
+          'Compression: longest side at most 1600 px, JPEG quality 0.8, transparent areas filled white. A photo from a phone usually ends up around 100–400 KB; a screenshot with flat colours much smaller. The original file is not kept.',
+          'Display: the token is replaced by the picture and the text of the token is hidden, except on the line being edited — put the cursor on that line and the raw [[img:…]] comes back so you can copy or delete it, like the "#" of a heading.',
+          'Click the picture to see it large with its size and dimensions. Click the dark background, press Esc or ✕ to close.',
+          'Storage: the picture itself lives in the browser database (Object Store "images"), never inside the note text. The note only has the token, so note text stays small and sync stays fast.',
+          'Sync: while you are signed in, referenced pictures are uploaded once to Drive as img_<id>.jpg inside the hidden app folder, and a device that has the note but not the picture downloads it automatically (only the missing ones are transferred).',
+          'Deleting the token removes the picture from the note. The picture file is cleaned up later: when no note mentions it for 30 days, it is deleted on the device and in Drive. Pictures of deleted notes follow the same 30-day rule.',
+          'An image inserted but not used in any note is kept for those 30 days before cleanup, so an accidental delete can be undone by pasting the token back.',
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Limits: no resizing, cropping or rotation after insertion, no animated GIF (only the first frame survives compression), no transparency (white instead), no alt text, and one picture cannot be shared by several notes — each insertion creates its own copy. Very large or many pictures increase the browser storage and the first sync time.',
+      },
+      {
+        type: 'code',
+        text: 'Trip photos\n\t[[img:mwx44oqih9o4v3]]\n\t[[img:mwx5a1b2c3d4e5]]',
       },
     ],
   },
@@ -496,7 +530,7 @@ export const help: HelpSection[] = [
       {
         type: 'ul',
         items: [
-          'Notes are written to this browser first, always. Nothing leaves the device until you sign in to Google; from then on, automatic sync sends the folder and note data to the app\'s private Drive folder in the background.',
+          'Notes are written to this browser first, always. Nothing leaves the device until you sign in to Google; from then on, automatic sync sends the folder and note data — and the pictures those notes use — to the app\'s private Drive folder in the background.',
           'The only network traffic is: loading the app (GitHub Pages), the Google sign-in script, and Drive requests you trigger. There is no analytics, no backend server and no third-party script besides Google sign-in.',
           'Google access is limited to the app-private Drive area (scope drive.appdata), which cannot see your other Drive files.',
           'Because data lives in the browser, it can be lost if site data is cleared, the browser profile is deleted, or the browser removes storage of sites it considers unused (some mobile browsers do this after a period of inactivity). Uploading a copy to Drive protects against that.',
@@ -518,7 +552,7 @@ export const help: HelpSection[] = [
           'No drag and drop (use Move to…).',
           'Only headings and strong text are formatted; no italic, links, lists or code blocks, and no Markdown preview.',
           'On a phone there are no keyboard shortcuts for moving or duplicating lines, or for fold all / unfold all.',
-          'No images.',
+          'Images cannot be resized, cropped or rotated inside the app, and animated GIFs lose their animation (one frame, compressed to JPEG).',
           'Sync is last write wins per note: there is no conflict dialog and no side-by-side merge, so an older edit of the same note can be replaced by a newer one from the other device (it stays in the Drive backup files for a while).',
           'Sync needs a network and a Google sign-in; while offline only the local copy changes.',
           'Undo history is not kept after switching notes or reloading.',
@@ -538,8 +572,9 @@ export const help: HelpSection[] = [
           'Stage 2: installable app (PWA) with offline support, published on GitHub Pages (done).',
           'Stage 3: Google Cloud project, Drive API and OAuth client (done, outside the app).',
           'Stage 4: Google sign-in and manual upload/download through Drive appdata, with a backup before the remote copy is replaced (done).',
-          'Stage 5 (now): automatic sync between devices, per note and folder, last write wins, soft deletes purged after 30 days, retries, backup rotation.',
-          'Stage 6: images, compressed and stored separately and referenced from notes.',
+          'Stage 5: automatic sync between devices, per note and folder, last write wins, soft deletes purged after 30 days, retries, backup rotation (done).',
+          'Stage 6 (now): images, compressed and stored separately, referenced from notes and synced on their own.',
+          'Later: search, export/import, shortcuts, tags, themes and remembered fold state (see the roadmap in the repository).',
         ],
       },
       {
@@ -575,6 +610,8 @@ export const help: HelpSection[] = [
           'Merge (src/lib/merge.ts): pure function over two snapshots. Union of ids per store, winner is the item with the larger updatedAt (equal timestamps keep the local copy), then tombstones older than 30 days are dropped, folder parents are checked for missing ids and cycles, notes of a folder deleted elsewhere are marked deleted, and notes whose folder was purged move to the root. It returns stats (fromRemote / toRemote / purged) used for the panel summary.',
           'Sync engine (src/lib/sync.svelte.ts): single-flight loop. Each round flushes pending edits, reads cloudtxt.json, merges, applies only the items that differ through one IndexedDB write each, then rewrites the remote file only when the merged result differs from it. A local change during the round sets a dirty flag, which defers the merge (never interrupts typing) and schedules another round. Triggers: 5 s debounce after local changes, app start, visibilitychange, online event; failures retry at 30 s doubling up to 5 min. Automatic rounds pass allowRefresh=false, so a stale token becomes "Session expired" instead of opening a Google window by itself.',
           'Applying merged data (store.mergeIn) updates note objects in place, so the open note is not remounted; store.remoteStamp is bumped when the open note changed, and the editor replaces its document only when it does not have focus (otherwise the next round sends the newer local text). Local data is never replaced wholesale during sync, so selection, expanded folders and folds survive.',
+          'Images: one IndexedDB object store "images" holds { id, blob, type, width, height, size, createdAt }. Insertion uses createImageBitmap + canvas (max edge 1600, JPEG 0.8, white background) and writes the token [[img:<id>]] at the cursor. The editor plugin matches the token on visible lines, hides it with a replace decoration plus an ImageWidget (object URL cached per id) unless the selection touches that line; clicking reports the id to App, which shows the picture in an overlay. Pasting and dropping are handled by a CodeMirror domEventHandlers plugin.',
+          'Image sync runs at the end of a round that touched notes, when an image was just added, when the editor reports a missing picture, or on the first round of a session. It uploads only referenced images that Drive lacks (img_<id>.jpg, multipart with a Blob body), downloads only referenced images this device lacks (alt=media), and deletes pictures no note has mentioned for 30 days locally and in Drive. Per-image failures are counted instead of failing the whole round.',
           'Deployment: GitHub Actions (.github/workflows/static.yml) builds on every push to master and publishes dist to GitHub Pages. The site is served from the /cloudtxt/ path, which is the Vite base in vite.config.ts. The OAuth Client ID lives in src/lib/config.ts and must list the deployed origin plus http://localhost:5173 as authorized JavaScript origins.',
         ],
       },
@@ -596,7 +633,15 @@ export const help: HelpSection[] = [
           ['No fold arrow on a line', 'A line only folds if the lines below it are indented deeper. Indent the children with Tab.'],
           ['Heading looks like plain text', 'The # marks must be followed by a space, with 1 to 6 # characters. No space, or 7+ #, means it is plain text.'],
           ['I cannot see the # marks', 'They are hidden when the cursor is on another line. Click on the heading line to show them.'],
-          ['Cannot indent on phone', 'Soft keyboards often lack Tab. Paste a Tab character or use a hardware keyboard.'],
+          ['Cannot indent on phone', 'Soft keyboards often lack Tab. Use the Indent button in the phone toolbar above the keyboard.'],
+          [
+            'An image shows "[image not available]"',
+            'The picture is not on this device yet. The editor asks for a sync automatically; if you are offline or signed out it stays a placeholder, and the note text still contains the token.',
+          ],
+          [
+            'Pasting a picture does nothing',
+            'The clipboard must contain an image file (not a link or text). Use "＋ Image" in the sidebar or the picture button in the phone toolbar to pick a file instead.',
+          ],
           ['Changes are not saved', 'Wait half a second after typing. If the browser blocks storage (some private modes), saving may fail; check the browser console for "IndexedDB write failed".'],
           [
             'Sync says "Session expired"',

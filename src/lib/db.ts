@@ -1,23 +1,46 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import type { Folder, Note } from './types'
+import type { Folder, Note, StoredImage } from './types'
 
 interface CloudtxtDB extends DBSchema {
   folders: { key: string; value: Folder }
   notes: { key: string; value: Note }
   meta: { key: string; value: unknown }
+  images: { key: string; value: StoredImage }
 }
 
 let dbPromise: Promise<IDBPDatabase<CloudtxtDB>> | null = null
 
 function db() {
-  dbPromise ??= openDB<CloudtxtDB>('cloudtxt', 1, {
-    upgrade(d) {
-      d.createObjectStore('folders', { keyPath: 'id' })
-      d.createObjectStore('notes', { keyPath: 'id' })
-      d.createObjectStore('meta')
+  dbPromise ??= openDB<CloudtxtDB>('cloudtxt', 2, {
+    upgrade(d, oldVersion) {
+      if (oldVersion < 1) {
+        d.createObjectStore('folders', { keyPath: 'id' })
+        d.createObjectStore('notes', { keyPath: 'id' })
+        d.createObjectStore('meta')
+      }
+      if (oldVersion < 2) d.createObjectStore('images', { keyPath: 'id' })
     },
   })
   return dbPromise
+}
+
+export async function putImage(image: StoredImage) {
+  await (await db()).put('images', image)
+}
+
+export async function getImage(id: string): Promise<StoredImage | undefined> {
+  return await (await db()).get('images', id)
+}
+
+export async function listImages(): Promise<StoredImage[]> {
+  return await (await db()).getAll('images')
+}
+
+export async function deleteImages(ids: string[]) {
+  if (!ids.length) return
+  const d = await db()
+  const tx = d.transaction('images', 'readwrite')
+  await Promise.all([...ids.map((id) => tx.store.delete(id)), tx.done])
 }
 
 export async function loadAll() {

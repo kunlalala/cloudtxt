@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import Sidebar from './lib/Sidebar.svelte'
   import Editor from './lib/Editor.svelte'
   import Dialog from './lib/Dialog.svelte'
@@ -7,6 +7,8 @@
   import Help from './lib/Help.svelte'
   import Outline from './lib/Outline.svelte'
   import DrivePanel from './lib/DrivePanel.svelte'
+  import ImageViewer from './lib/ImageViewer.svelte'
+  import { imageToken, storeImageFile } from './lib/images'
   import type { OutlineItem } from './lib/headings'
   import type { DialogState } from './lib/dialog'
   import { store, UNTITLED, TAB_SIZES } from './lib/store.svelte'
@@ -20,6 +22,8 @@
   let guideOpen = $state(false)
   let helpOpen = $state(false)
   let cloudOpen = $state(false)
+  let viewImage = $state<string | null>(null)
+  let fileInput = $state<HTMLInputElement>()
   let editor = $state<Editor>()
   let outline = $state.raw<OutlineItem[]>([])
   let cursorLine = $state(0)
@@ -36,6 +40,38 @@
   function jump(line: number) {
     editor?.goToLine(line)
     outlineDrawer = false
+  }
+
+  function pickImage() {
+    fileInput?.click()
+  }
+
+  /** compress + store every picked file, then paste the tokens into the open note */
+  async function insertImages(files: File[]) {
+    if (!files.length) return
+    if (!store.selected) {
+      store.addNote()
+      await tick()
+    }
+    const tokens: string[] = []
+    for (const file of files) {
+      try {
+        const image = await storeImageFile(file)
+        if (image) tokens.push(imageToken(image.id))
+      } catch (e) {
+        console.error('[cloudtxt] image insert failed', e)
+      }
+    }
+    if (!tokens.length) return
+    editor?.insertText(tokens.map((t) => `\n${t}\n`).join(''))
+    sync.imagesChanged()
+  }
+
+  function onFilesPicked(e: Event) {
+    const input = e.currentTarget as HTMLInputElement
+    const files = input.files ? [...input.files] : []
+    input.value = ''
+    void insertImages(files)
   }
 
   onMount(() => {
@@ -78,6 +114,7 @@
     onclosedrawer={() => (drawer = false)}
     onguide={() => ((guideOpen = true), (drawer = false))}
     onhelp={() => ((helpOpen = true), (drawer = false))}
+    onimage={() => (drawer = false, pickImage())}
   />
   {#if drawer || outlineDrawer}
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -138,6 +175,9 @@
             oncursor={(l) => (cursorLine = l)}
             onchange={(v) => store.edit(v)}
             remoteStamp={store.remoteStamp}
+            onimagefiles={(files) => void insertImages(files)}
+            onimageopen={(id) => (viewImage = id)}
+            onimagemissing={() => sync.imagesChanged()}
           />
         </div>
         <!-- pointerdown is cancelled so the editor keeps focus and the keyboard stays open -->
@@ -147,6 +187,10 @@
           </button>
           <button aria-label="Redo" title="Redo" onpointerdown={(e) => (e.preventDefault(), editor?.run('redo'))}>
             <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m14 5 4 4-4 4" /><path d="M18 9H9a5 5 0 0 0 0 10h4" /></svg>
+          </button>
+          <span class="sep"></span>
+          <button aria-label="Insert image" title="Insert image" onpointerdown={(e) => (e.preventDefault(), pickImage())}>
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="16" height="14" rx="2" /><circle cx="8" cy="9" r="1.5" /><path d="m4 16 5-4 4 3 2-2 3 3" /></svg>
           </button>
           <span class="sep"></span>
           <button aria-label="Unindent" title="Unindent (Shift+Tab)" onpointerdown={(e) => (e.preventDefault(), editor?.run('unindent'))}>
@@ -182,6 +226,12 @@
     <span>Ready to work offline.</span>
     <button class="later" aria-label="Close" onclick={() => (pwa.offlineReady = false)}>✕</button>
   </div>
+{/if}
+
+<input class="file" type="file" accept="image/*" multiple bind:this={fileInput} onchange={onFilesPicked} />
+
+{#if viewImage}
+  <ImageViewer id={viewImage} onclose={() => (viewImage = null)} />
 {/if}
 
 {#if dialog}
@@ -388,6 +438,9 @@
   .hint {
     color: var(--muted);
     padding: 24px;
+  }
+  .file {
+    display: none;
   }
   .backdrop {
     position: fixed;

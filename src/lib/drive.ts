@@ -129,6 +129,46 @@ export async function keepBackup(token: string, previous: string, rotate: boolea
   await writeNamed(token, BACKUP_SLOTS[0], previous)
 }
 
+export async function readBlob(token: string, id: string): Promise<Blob> {
+  const res = await fetch(`${FILES}/${encodeURIComponent(id)}?alt=media`, { headers: bearer(token) })
+  if (!res.ok) throw await toError(res)
+  return await res.blob()
+}
+
+/** Create a binary file (image) inside appDataFolder. */
+export async function createBinaryFile(
+  token: string,
+  name: string,
+  blob: Blob,
+  mime = 'image/jpeg',
+): Promise<DriveFile> {
+  const boundary = `cloudtxt-${Math.random().toString(36).slice(2)}`
+  const metadata = { name, mimeType: mime, parents: ['appDataFolder'] }
+  const body = new Blob([
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
+    `--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`,
+    blob,
+    `\r\n--${boundary}--`,
+  ])
+  const params = new URLSearchParams({ uploadType: 'multipart', fields: META_FIELDS })
+  const res = await fetch(`${UPLOAD}?${params}`, {
+    method: 'POST',
+    headers: bearer(token, { 'Content-Type': `multipart/related; boundary=${boundary}` }),
+    body,
+  })
+  if (!res.ok) throw await toError(res)
+  return (await res.json()) as DriveFile
+}
+
+export async function deleteFile(token: string, id: string): Promise<void> {
+  const res = await fetch(`${FILES}/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: bearer(token),
+  })
+  // already gone is fine
+  if (!res.ok && res.status !== 404) throw await toError(res)
+}
+
 /** Replace the content of an existing file. */
 export async function updateFile(token: string, id: string, text: string): Promise<DriveFile> {
   const params = new URLSearchParams({ uploadType: 'media', fields: META_FIELDS })
