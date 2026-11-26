@@ -571,13 +571,29 @@
     applyRemote()
   })
 
-  /** Insert text (an image token) at the cursor, keeping focus in the editor. */
-  export function insertText(text: string) {
-    if (!view) return
-    const sel = view.state.selection.main
+  /**
+   * Insert image tokens at the cursor, keeping the indentation of the current line so an image
+   * inside an outline item stays at that depth. On an empty or indentation-only line the tokens
+   * simply continue that indentation (no blank line is added); when real text is before or after
+   * the cursor the tokens go on their own line first.
+   */
+  export function insertImageTokens(ids: string[]) {
+    if (!view || !ids.length) return
+    const state = view.state
+    const sel = state.selection.main
+    const line = state.doc.lineAt(sel.from)
+    const indent = /^[ \t]*/.exec(line.text)?.[0] ?? ''
+    const before = state.doc.sliceString(line.from, sel.from)
+    const after = state.doc.sliceString(sel.to, line.to)
+    const block = ids.map((id) => `[[img:${id}]]`).join('\n' + indent)
+    // a cursor inside the leading whitespace still must not split the indentation
+    const from = before.trim() ? sel.from : Math.max(sel.from, line.from + indent.length)
+    const to = Math.max(sel.to, from)
+    const text = (before.trim() ? '\n' + indent : '') + block + (after.trim() ? '\n' + indent : '')
+
     view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: text },
-      selection: { anchor: sel.from + text.length },
+      changes: { from, to, insert: text },
+      selection: { anchor: from + text.length },
       scrollIntoView: true,
     })
     view.focus()

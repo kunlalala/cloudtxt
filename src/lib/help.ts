@@ -363,7 +363,7 @@ export const help: HelpSection[] = [
       },
       {
         type: 'p',
-        text: 'Ways to add one: press Ctrl+V (or long-press → Paste on a phone) with a picture in the clipboard, drop an image file on the editor, or use "＋ Image" in the sidebar (also the picture button in the phone toolbar). The picture is compressed, stored and its token is inserted where the cursor is.',
+        text: 'Ways to add one: press Ctrl+V (or long-press → Paste on a phone) with a picture in the clipboard, drop an image file on the editor, or use "＋ Image" in the sidebar (also the picture button in the phone toolbar). The picture is compressed, stored and its token is inserted where the cursor is: it goes on its own line with the same indentation as the current line, so an image inside an outline item stays at that depth. On an empty or indentation-only line (for example a fresh row started with Enter) the token simply continues that indentation, and several pictures keep the same depth.',
       },
       {
         type: 'ul',

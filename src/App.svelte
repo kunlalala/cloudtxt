@@ -8,7 +8,7 @@
   import Outline from './lib/Outline.svelte'
   import DrivePanel from './lib/DrivePanel.svelte'
   import ImageViewer from './lib/ImageViewer.svelte'
-  import { imageToken, storeImageFile } from './lib/images'
+  import { storeImageFile } from './lib/images'
   import type { OutlineItem } from './lib/headings'
   import type { DialogState } from './lib/dialog'
   import { store, UNTITLED, TAB_SIZES } from './lib/store.svelte'
@@ -53,17 +53,17 @@
       store.addNote()
       await tick()
     }
-    const tokens: string[] = []
+    const ids: string[] = []
     for (const file of files) {
       try {
         const image = await storeImageFile(file)
-        if (image) tokens.push(imageToken(image.id))
+        if (image) ids.push(image.id)
       } catch (e) {
         console.error('[cloudtxt] image insert failed', e)
       }
     }
-    if (!tokens.length) return
-    editor?.insertText(tokens.map((t) => `\n${t}\n`).join(''))
+    if (!ids.length) return
+    editor?.insertImageTokens(ids)
     sync.imagesChanged()
   }
 
