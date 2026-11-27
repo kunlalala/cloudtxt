@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
-  import { Compartment, EditorState, Prec, RangeSetBuilder, type StateEffect } from '@codemirror/state'
+  import { onMount, tick, untrack } from 'svelte'
+  import { Compartment, EditorState, Prec, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
   import {
     Decoration,
     EditorView,
@@ -28,6 +28,7 @@
   } from '@codemirror/language'
   import { HEADING_RE, HEADING_COLORS, HEADING_SIZES, STRONG_COLOR, strongRegex, outlineOf, type OutlineItem } from './headings'
   import { imageUrl } from './images'
+  import { findMatches, type MatchRange } from './search'
 
   let {
     noteId,
@@ -364,6 +365,126 @@
     },
   })
 
+  // ---- find in note ---------------------------------------------------
+  let findOpen = $state(false)
+  let findQuery = $state('')
+  let findWholeWord = $state(false)
+  let findTotal = $state(0)
+  /** 0-based index of the current match; -1 when there is none */
+  let findIndex = $state(-1)
+  let findInput = $state<HTMLInputElement>()
+  /** non-reactive copy for the decoration effect */
+  let findHits: MatchRange[] = []
+
+  const findMatchMark = Decoration.mark({ class: 'cm-find-match' })
+  const findCurrentMark = Decoration.mark({ class: 'cm-find-current' })
+  const setFindMarks = StateEffect.define<{ matches: MatchRange[]; current: number }>()
+
+  const findHighlight = StateField.define<DecorationSet>({
+    create: () => Decoration.none,
+    update(deco, tr) {
+      for (const effect of tr.effects) {
+        if (!effect.is(setFindMarks)) continue
+        const b = new RangeSetBuilder<Decoration>()
+        for (let i = 0; i < effect.value.matches.length; i++) {
+          const m = effect.value.matches[i]
+          b.add(m.from, m.to, i === effect.value.current ? findCurrentMark : findMatchMark)
+        }
+        return b.finish()
+      }
+      return deco.map(tr.changes)
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  })
+
+  function paintFind(current: number) {
+    view?.dispatch({ effects: setFindMarks.of({ matches: findHits, current }) })
+  }
+
+  /** Select a match (without focusing the editor) and scroll it into view. */
+  function revealMatch(i: number) {
+    if (!view || i < 0 || i >= findHits.length) return
+    const m = findHits[i]
+    const effects: StateEffect<unknown>[] = [EditorView.scrollIntoView(m.from, { y: 'center', yMargin: 8 })]
+    foldedRanges(view.state).between(m.from, m.from, (from, to) => {
+      if (from <= m.from && to >= m.from) effects.push(unfoldEffect.of({ from, to }))
+    })
+    view.dispatch({ selection: { anchor: m.from, head: m.to }, effects })
+  }
+
+  /**
+   * Rebuild the match list. 'nearest' jumps to the first match at or after `from` (typing in the
+   * box or arriving from the global search), 'keep' only refreshes highlights after an edit so the
+   * cursor does not move while typing in the note.
+   */
+  function recomputeFind(mode: 'nearest' | 'keep', from = 0) {
+    if (!view) return
+    findHits = findOpen && findQuery ? findMatches(view.state.doc.toString(), findQuery, { wholeWord: findWholeWord }) : []
+    findTotal = findHits.length
+    if (!findTotal) {
+      findIndex = -1
+      paintFind(-1)
+      return
+    }
+    if (mode === 'nearest') {
+      const at = findHits.findIndex((m) => m.from >= from)
+      findIndex = at < 0 ? 0 : at
+      paintFind(findIndex)
+      revealMatch(findIndex)
+    } else {
+      if (findIndex < 0 || findIndex >= findTotal) findIndex = 0
+      paintFind(findIndex)
+    }
+  }
+
+  function stepFind(delta: number) {
+    if (!view || !findTotal) return
+    findIndex = (findIndex + delta + findTotal) % findTotal
+    paintFind(findIndex)
+    revealMatch(findIndex)
+  }
+
+  async function focusFind() {
+    await tick()
+    // on a phone focusing would pop up the keyboard right over the note
+    if (window.matchMedia('(min-width: 768px)').matches) findInput?.focus()
+  }
+
+  /** Used by Ctrl/Cmd+F; prefills with the selected text when it is on one line. */
+  export function openFind() {
+    if (!view) return
+    const sel = view.state.selection.main
+    const picked = sel.to > sel.from ? view.state.sliceDoc(sel.from, sel.to) : ''
+    if (picked && !picked.includes('\n')) findQuery = picked
+    findOpen = true
+    recomputeFind('nearest', sel.from)
+    void focusFind()
+  }
+
+  /** Used by the global search screen: open here and select the match at `offset`. */
+  export function findInNote(query: string, opts: { wholeWord: boolean }, offset = 0) {
+    if (!view) return
+    findOpen = true
+    findQuery = query
+    findWholeWord = opts.wholeWord
+    recomputeFind('nearest', offset)
+    void focusFind()
+  }
+
+  function resetFind() {
+    findOpen = false
+    findTotal = 0
+    findIndex = -1
+    findHits = []
+  }
+
+  export function closeFind() {
+    resetFind()
+    if (!view) return
+    view.dispatch({ effects: setFindMarks.of({ matches: [], current: -1 }) })
+    if (window.matchMedia('(min-width: 768px)').matches) view.focus()
+  }
+
   const theme = EditorView.theme(
     {
       '&': { height: '100%', color: 'var(--fg)', backgroundColor: 'var(--bg)' },
@@ -373,6 +494,8 @@
       '.cm-line': { padding: '0 12px', overflowWrap: 'anywhere' },
       '.cm-h': { fontWeight: '700' },
       '.cm-strong': { color: STRONG_COLOR, fontWeight: '700' },
+      '.cm-find-match': { backgroundColor: 'rgba(230,192,123,0.22)', borderRadius: '2px' },
+      '.cm-find-current': { backgroundColor: '#e6c07b', color: '#1e2127', borderRadius: '2px' },
       '.cm-img': { display: 'inline-block', maxWidth: '100%', verticalAlign: 'middle' },
       '.cm-img img': {
         display: 'block',
@@ -439,12 +562,16 @@
         images,
         imagePaste,
         layout,
+        findHighlight,
         theme,
         keymap.of([indentWithTab, ...foldKeymap, ...historyKeymap, ...defaultKeymap]),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) {
             onchange(u.state.doc.toString())
             emitOutline(u.state)
+            // rebuild highlights after the update (dispatching inside it is not allowed) but
+            // never move the cursor while the user is typing in the note
+            if (findOpen) queueMicrotask(() => view && recomputeFind('keep'))
           }
           if (u.docChanged || u.selectionSet) emitCursor(u.state)
           const foldChanged = u.transactions.some((tr) => tr.effects.some((e) => e.is(foldEffect) || e.is(unfoldEffect)))
@@ -536,6 +663,7 @@
     const id = noteId
     if (!view || id === current) return
     current = id
+    resetFind()
     view.setState(untrack(() => createState(content)))
     view.scrollDOM.scrollTop = 0
     restoreFolds(id)
@@ -600,11 +728,138 @@
   }
 </script>
 
-<div class="editor" bind:this={host} onfocusout={() => setTimeout(applyRemote, 0)}></div>
+<div class="wrap">
+  <div class="editor" bind:this={host} onfocusout={() => setTimeout(applyRemote, 0)}></div>
+  {#if findOpen}
+    <div class="findbar" role="search" aria-label="Find in note">
+      <input
+        bind:this={findInput}
+        value={findQuery}
+        placeholder="Find in note"
+        aria-label="Find in note"
+        autocomplete="off"
+        spellcheck="false"
+        oninput={(e) => {
+          findQuery = e.currentTarget.value
+          recomputeFind('nearest', view?.state.selection.main.from ?? 0)
+        }}
+        onkeydown={(e) => {
+          if (e.isComposing) return
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            stepFind(e.shiftKey ? -1 : 1)
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            closeFind()
+          }
+        }}
+      />
+      <button
+        class="opt"
+        class:on={findWholeWord}
+        aria-pressed={findWholeWord}
+        aria-label="Match whole word"
+        title="Match whole word"
+        onpointerdown={(e) => e.preventDefault()}
+        onclick={() => {
+          findWholeWord = !findWholeWord
+          recomputeFind('nearest', view?.state.selection.main.from ?? 0)
+          findInput?.focus()
+        }}>W</button
+      >
+      <span class="count" aria-live="polite">{findTotal ? `${findIndex + 1}/${findTotal}` : '0/0'}</span>
+      <button class="nav" aria-label="Previous match" title="Previous match (Shift+Enter)" disabled={!findTotal} onpointerdown={(e) => e.preventDefault()} onclick={() => stepFind(-1)}>▴</button>
+      <button class="nav" aria-label="Next match" title="Next match (Enter)" disabled={!findTotal} onpointerdown={(e) => e.preventDefault()} onclick={() => stepFind(1)}>▾</button>
+      <button class="nav" aria-label="Close find" title="Close (Esc)" onpointerdown={(e) => e.preventDefault()} onclick={closeFind}>✕</button>
+    </div>
+  {/if}
+</div>
 
 <style>
+  .wrap {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+  }
   .editor {
     height: 100%;
     min-height: 0;
+  }
+  .findbar {
+    position: absolute;
+    top: 6px;
+    right: 14px;
+    left: auto;
+    max-width: calc(100% - 20px);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  }
+  .findbar input {
+    flex: 1 1 120px;
+    width: clamp(100px, 26vw, 240px);
+    min-width: 0;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--fg);
+    font: inherit;
+    font-size: 16px;
+  }
+  .findbar input:focus {
+    outline: none;
+    border-color: var(--accent-line);
+  }
+  .findbar button {
+    width: 44px;
+    min-width: 44px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+  }
+  .findbar button:hover:not(:disabled) {
+    color: var(--fg);
+    background: var(--hover);
+    border-radius: 8px;
+  }
+  .findbar .opt {
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+  .findbar .opt.on {
+    color: var(--accent);
+    background: var(--accent-fill);
+    border-radius: 8px;
+  }
+  .findbar .count {
+    min-width: 48px;
+    padding: 0 2px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  @media (max-width: 520px) {
+    .findbar {
+      left: 8px;
+      right: 8px;
+    }
   }
 </style>

@@ -5,11 +5,13 @@
   import Dialog from './lib/Dialog.svelte'
   import Guide from './lib/Guide.svelte'
   import Help from './lib/Help.svelte'
+  import GlobalSearch from './lib/GlobalSearch.svelte'
   import Outline from './lib/Outline.svelte'
   import DrivePanel from './lib/DrivePanel.svelte'
   import ImageViewer from './lib/ImageViewer.svelte'
   import { storeImageFile } from './lib/images'
   import type { OutlineItem } from './lib/headings'
+  import type { SearchHit, SearchOptions } from './lib/search'
   import type { DialogState } from './lib/dialog'
   import { store, UNTITLED, TAB_SIZES } from './lib/store.svelte'
   import { pwa } from './lib/pwa.svelte'
@@ -22,6 +24,7 @@
   let guideOpen = $state(false)
   let helpOpen = $state(false)
   let cloudOpen = $state(false)
+  let searchOpen = $state(false)
   let viewImage = $state<string | null>(null)
   let fileInput = $state<HTMLInputElement>()
   let editor = $state<Editor>()
@@ -40,6 +43,20 @@
   function jump(line: number) {
     editor?.goToLine(line)
     outlineDrawer = false
+  }
+
+  function openSearch() {
+    searchOpen = true
+    drawer = false
+    outlineDrawer = false
+  }
+
+  /** Open a global-search hit: switch note, then show the find bar on that match. */
+  async function openHit(hit: SearchHit, query: string, opts: SearchOptions) {
+    searchOpen = false
+    store.select(hit.noteId)
+    await tick()
+    editor?.findInNote(query, opts, hit.offset)
   }
 
   function pickImage() {
@@ -87,6 +104,19 @@
     document.addEventListener('visibilitychange', onVis)
     window.addEventListener('pagehide', flush)
 
+    // Ctrl/Cmd+F finds inside the open note; Ctrl/Cmd+Shift+F searches every note. While a panel
+    // or dialog is open the shortcuts stay out of the way (and keep the browser's own find closed).
+    const onShortcut = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+      if (e.key.toLowerCase() !== 'f') return
+      e.preventDefault()
+      if (helpOpen || guideOpen || cloudOpen || searchOpen || dialog || viewImage) return
+      if (e.shiftKey) openSearch()
+      else if (store.selected) editor?.openFind()
+      else openSearch()
+    }
+    window.addEventListener('keydown', onShortcut, true)
+
     // Phones keep the layout viewport full-height when the keyboard opens, so follow the visual
     // viewport instead; this keeps the toolbar right above the keyboard.
     const vv = window.visualViewport
@@ -101,6 +131,7 @@
     return () => {
       document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('pagehide', flush)
+      window.removeEventListener('keydown', onShortcut, true)
       vv?.removeEventListener('resize', fit)
       vv?.removeEventListener('scroll', fit)
     }
@@ -133,6 +164,12 @@
       >
         {#each TAB_SIZES as n}<option value={n}>Indent {n}</option>{/each}
       </select>
+      <button class="search" aria-label="Search all notes" title="Search all notes (Ctrl+Shift+F)" onclick={openSearch}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="m15.5 15.5 4.5 4.5" />
+        </svg>
+      </button>
       <button
         class="cloud"
         class:on={cloud.status === 'signed-in'}
@@ -243,6 +280,9 @@
 {#if helpOpen}
   <Help onclose={() => (helpOpen = false)} />
 {/if}
+{#if searchOpen}
+  <GlobalSearch onclose={() => (searchOpen = false)} onopen={(hit, query, opts) => void openHit(hit, query, opts)} />
+{/if}
 {#if cloudOpen}
   <DrivePanel onclose={() => (cloudOpen = false)} />
 {/if}
@@ -303,6 +343,7 @@
     color: var(--fg);
   }
   .cloud,
+  .search,
   .ol {
     position: relative;
     width: 44px;
@@ -316,6 +357,7 @@
     justify-content: center;
   }
   .cloud:hover,
+  .search:hover,
   .ol:hover {
     color: var(--fg);
   }

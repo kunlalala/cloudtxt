@@ -16,7 +16,7 @@ export interface HelpSection {
   blocks: Block[]
 }
 
-export const HELP_UPDATED = 'Stage 6 (images)'
+export const HELP_UPDATED = 'Stage 7 (search)'
 
 export const help: HelpSection[] = [
   {
@@ -29,7 +29,7 @@ export const help: HelpSection[] = [
       },
       {
         type: 'p',
-        text: 'Current version: Stage 2. Notes live in your browser on this device. The app can be installed on your phone or computer and works without a network. There is no account, no Google sign-in, no sync between devices and no images yet. Those come in later stages (see "Roadmap").',
+        text: 'Current version: Stage 7. Notes live in your browser on this device, and the app can be installed on your phone or computer so it works without a network. Google sign-in is optional; when you use it, notes sync automatically through your own Google Drive and images travel with them. You can search inside the open note and across all notes.',
       },
       {
         type: 'ul',
@@ -439,6 +439,54 @@ export const help: HelpSection[] = [
     ],
   },
   {
+    id: 'search',
+    title: 'Search (find in a note and in all notes)',
+    blocks: [
+      {
+        type: 'p',
+        text: 'There are two searches: one inside the note you have open, and one across every note in the app. Both ignore upper and lower case, so "note", "Note" and "NOTE" are the same search. Neither one changes your text.',
+      },
+      {
+        type: 'table',
+        head: ['Key', 'What it does'],
+        rows: [
+          ['Ctrl+F (Cmd+F on a Mac)', 'Open the find bar in the open note. If text on one line is selected, it is used as the search.'],
+          ['Ctrl+Shift+F (Cmd+Shift+F on a Mac)', 'Open "Search all notes". On a phone, tap the magnifier in the top bar instead.'],
+          ['Enter / Shift+Enter', 'In the find bar: next / previous match, wrapping around at the end.'],
+          ['Esc', 'Close the find bar or the search screen.'],
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Find in the open note: a bar appears at the top of the editor. Every match is highlighted; the current one is highlighted more strongly and selected, and the counter shows "current/total". The "W" button limits the search to whole words, so "cat" no longer matches "concat".',
+      },
+      {
+        type: 'ul',
+        items: [
+          'Typing in the find bar jumps to the first match at or after the cursor, so you can place the cursor where the search should start.',
+          'The find bar keeps the keyboard focus, so Enter and Shift+Enter move between matches and do not edit the note by accident.',
+          'Matches inside a folded block are unfolded when you jump to them.',
+          'You can still edit the note while the bar is open: the highlights follow the text and your cursor is not moved. Switching to another note closes the bar.',
+          'Closing the bar (Esc or ✕) leaves the cursor on the current match on a computer; on a phone the keyboard stays closed.',
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Search all notes: the search screen covers the app. Results are grouped by note with its folder path, and each line shows its line number and the matching text, with the match highlighted.',
+      },
+      {
+        type: 'ul',
+        items: [
+          'Use ↑ / ↓ to move through the results and Enter to open one; Esc or the arrow at the top closes the screen. On a phone simply tap a result.',
+          'Opening a result switches to that note, jumps to the line and opens the find bar on the same word, so Enter / Shift+Enter continue from there.',
+          'The "W" button means the same as in the find bar.',
+          'Only note text is searched; folder names are not separate results. Note titles usually come from the first line, so searching that text finds the note.',
+          'Deleted notes are not searched. At most 20 matching lines per note and 300 lines in total are listed; when there are more, "+N more" or a line at the end tells you to narrow the search.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'folding',
     title: 'Folding (collapse / expand)',
     blocks: [
@@ -485,6 +533,9 @@ export const help: HelpSection[] = [
           ['Ctrl+Z', 'Undo'],
           ['Ctrl+Y or Ctrl+Shift+Z', 'Redo'],
           ['Ctrl+A', 'Select all'],
+          ['Ctrl+F', 'Find in the open note'],
+          ['Ctrl+Shift+F', 'Search all notes'],
+          ['Enter / Shift+Enter', 'In the find bar: next / previous match'],
           ['Alt+L (Ctrl+L on Mac)', 'Select the current line'],
           ['Alt+↑ / Alt+↓', 'Move the line (or selected lines) up / down'],
           ['Shift+Alt+↑ / Shift+Alt+↓', 'Duplicate the line up / down'],
@@ -495,7 +546,7 @@ export const help: HelpSection[] = [
           ['Ctrl+Home / Ctrl+End', 'Start / end of the note'],
           ['Ctrl+Shift+[ / ]', 'Fold / unfold at the cursor'],
           ['Ctrl+Alt+[ / ]', 'Fold all / unfold all'],
-          ['Esc', 'Close a dialog or this help'],
+          ['Esc', 'Close a dialog, the find bar, the search screen or this help'],
         ],
       },
       {
@@ -518,7 +569,8 @@ export const help: HelpSection[] = [
           'The page follows the visible area above the on-screen keyboard, so the editor and the bottom toolbar are never hidden behind the keyboard.',
           'Editing toolbar: a bar at the bottom of the editor with four buttons: Undo, Redo, Unindent (Shift+Tab) and Indent (Tab). It sits right above the keyboard when the keyboard is open. Indent and Unindent work on the current line or on all selected lines. Tapping a button does not close the keyboard.',
           'The toolbar is shown on phones and touch tablets. It is hidden on a computer with a mouse, where the keyboard shortcuts do the same.',
-          'Phone and computer do not share notes yet; sync arrives in a later stage.',
+          'Search: tap the magnifier in the top bar to search all notes; tap a result to open the note with that word found. The find bar at the top of the editor has ✕ to close and ▴ / ▾ to step through matches, so the keyboard can stay open.',
+          'Phone and computer share notes through Google Drive when you sign in (see "Automatic sync").',
         ],
       },
     ],
@@ -546,7 +598,8 @@ export const help: HelpSection[] = [
       {
         type: 'ul',
         items: [
-          'No search yet.',
+          'Search is plain text only: no regular expressions and no search & replace. It always ignores upper and lower case; only whole-word matching can be switched on.',
+          'Search covers note text only (not folder names) and lists at most 20 lines per note and 300 lines in total at a time.',
           'No export or import of notes.',
           'No trash / restore screen for deleted items.',
           'No drag and drop (use Move to…).',
@@ -573,8 +626,9 @@ export const help: HelpSection[] = [
           'Stage 3: Google Cloud project, Drive API and OAuth client (done, outside the app).',
           'Stage 4: Google sign-in and manual upload/download through Drive appdata, with a backup before the remote copy is replaced (done).',
           'Stage 5: automatic sync between devices, per note and folder, last write wins, soft deletes purged after 30 days, retries, backup rotation (done).',
-          'Stage 6 (now): images, compressed and stored separately, referenced from notes and synced on their own.',
-          'Later: search, export/import, shortcuts, tags, themes and remembered fold state (see the roadmap in the repository).',
+          'Stage 6: images, compressed and stored separately, referenced from notes and synced on their own (done).',
+          'Stage 7 (now): search inside the open note and across all notes, with match highlighting, a match counter, next/previous, whole-word matching and results that jump straight to the line.',
+          'Later: export/import, search & replace, tags and themes (see the roadmap in the repository).',
         ],
       },
       {
@@ -600,6 +654,7 @@ export const help: HelpSection[] = [
           'Strong text: a second CodeMirror view plugin finds /!!(?=\\S)([^\\n]*?\\S)!!/g on visible lines, marks the text between the "!!" with the class cm-strong (red, bold) and hides the two "!!" marks with replace decorations, except on lines that touch the selection. Only the hidden marks are atomic, so the cursor skips the marks but can enter the text. The outline removes the marks from heading text.',
           'Outline: the editor scans the lines of the note for the heading pattern after every change and reports the list only when it differs from the last one. The outline panel highlights the last heading at or above the cursor line. Jumping dispatches a selection plus EditorView.scrollIntoView(y: start), and unfolds any folded range that contains the target line. The desktop open/closed choice is stored in the meta store key "outlineOpen"; the phone drawer always starts closed.',
           'Headings: a CodeMirror view plugin matches /^([ \t]*)(#{1,6})[ \t]+/ on visible lines, adds a line decoration (cm-h1…cm-h6, which set size, colour and bold) and hides the marks with a replace decoration, except on lines that touch the selection. The hidden range is registered as an atomic range so the cursor skips over it. Leading indentation is wrapped in a mark that keeps the normal font size, is never broken across rows and uses a tab width of N "ch", so indented headings stay aligned with normal lines. A second plugin gives every indented line padding-left equal to its indentation (columns times --cw, one "ch" of the normal editor font, a registered CSS length) with a matching negative text-indent, which is what makes wrapped rows hang under the text. The width comes from CSS, not from a measurement in JavaScript, so it cannot go out of date while you type. Heading sizes are CSS variables (--h1-size…--h6-size in app.css) with smaller values under 768px.',
+          'Search (src/lib/search.ts): pure helpers shared by both searches, no search library is added to the bundle. makeMatcher escapes the query, adds a word boundary only on edges that are word characters when whole-word is on, and always uses the "gi" flags. The find bar keeps a CodeMirror StateField of mark decorations: every match gets cm-find-match, the current one cm-find-current, and the list is rebuilt in a microtask after an edit because dispatching during an update is not allowed, so typing in the note never moves the cursor. The global screen scans live notes line by line and stops at 20 lines per note, 300 lines in total or 2000 matches per note; long lines are shortened around the first match with "…". Selecting a match and scrolling use the editor transaction (selection plus EditorView.scrollIntoView), and folded ranges that contain the match are unfolded first.',
           'Run locally: npm install, then npm run dev (add -- --host to open it from a phone on the same Wi-Fi). Build with npm run build. In dev mode the app is served from /cloudtxt/ (for example http://localhost:5173/cloudtxt/).',
           'PWA: vite-plugin-pwa generates a web app manifest and a service worker (Workbox) at build time. Every built file is precached when the service worker installs (about 17 files, 0.4 MB), and page navigations fall back to the cached index.html, so the app opens with no network. The service worker only caches the app files; your notes are in IndexedDB, which it does not touch.',
           'PWA updates: the service worker is registered in "prompt" mode, so a new version downloads in the background and waits instead of reloading under your fingers. The app checks on start, on visibilitychange (visible) and every hour. When the page becomes hidden, a waiting update is applied immediately after flushing pending edits, which makes normal use feel auto-updating; when the page is visible the "A new version is ready" banner is used instead. Tapping Update flushes, activates the new worker and reloads (controllerchange).',
