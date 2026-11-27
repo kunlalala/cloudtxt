@@ -16,7 +16,7 @@ export interface HelpSection {
   blocks: Block[]
 }
 
-export const HELP_UPDATED = 'Stage 7 (search)'
+export const HELP_UPDATED = 'Stage 7 (search, connection notice)'
 
 export const help: HelpSection[] = [
   {
@@ -151,6 +151,7 @@ export const help: HelpSection[] = [
           'Before the remote file is replaced, the previous content is saved in the hidden folder: cloudtxt.backup.json is always the last version, and the two older slots (cloudtxt.backup.1.json, cloudtxt.backup.2.json) are shifted on manual uploads and about every 10 minutes during automatic sync.',
           'Typing is never interrupted. If the open note also changed on another device and you are not typing in it, the new text appears in place. If you are typing, nothing moves under your cursor: your text is newer and is sent up in the next round instead.',
           'If a round fails (network, Google error, expired session) nothing is lost: the local data is untouched, the error appears in the panel, and the app retries with a growing delay (30 s up to 5 min). An expired session stops the retries until you sign in again.',
+          'When this device is not connected — offline, signed out, or the Google session expired — a small notice appears at the bottom of the screen saying that notes stay on this device. Close it with ✕. The notice is remembered for the rest of the browser session; it appears again after the connection has been restored and then fails again.',
           'Settings are never synced: indent width, outline open/closed, folded lines and the sign-in token stay on each device.',
           'The switch in the panel turns automatic sync off (it is remembered on the device). "Sync now" still works while it is off.',
           'When cloudtxt merges, a note whose folder was deleted elsewhere is hidden too, a note whose folder is gone for good is moved to the root, and folders that point at themselves in a loop are detached, so nothing becomes invisible.',
@@ -177,7 +178,7 @@ export const help: HelpSection[] = [
       {
         type: 'ul',
         items: [
-          'The top bar shows the title of the open note, the Indent menu, the Google Drive button (cloud icon) and the outline button. On desktop the outline panel sits on the right of the editor.',
+          'The top bar shows the title of the open note, the Indent menu, the search button, the Google Drive button (cloud icon) and the outline button. On desktop the outline panel sits on the right of the editor.',
           'The sidebar shows the current folder path above the tree ("Root" if none).',
           'Dialogs (rename, move, delete) appear as a bottom sheet on phones and a centred box on desktop. Press Esc or tap outside to close.',
         ],

@@ -33,6 +33,63 @@
   let appH = $state(0)
   let appTop = $state(0)
 
+  /** session-scoped dismissal of the "not connected" notice, keyed by reason */
+  const NOTICE_KEY = 'cloudtxt.dismissedNotices'
+  let online = $state(navigator.onLine)
+  let noticeReady = $state(false)
+  let dismissed = $state<string[]>(readDismissed())
+  let wasConnected = false
+
+  function readDismissed(): string[] {
+    try {
+      const raw = sessionStorage.getItem(NOTICE_KEY)
+      const list: unknown = raw ? JSON.parse(raw) : []
+      return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : []
+    } catch {
+      return []
+    }
+  }
+
+  function writeDismissed(keys: string[]) {
+    dismissed = keys
+    try {
+      if (keys.length) sessionStorage.setItem(NOTICE_KEY, JSON.stringify(keys))
+      else sessionStorage.removeItem(NOTICE_KEY)
+    } catch {
+      // storage disabled: the notice simply comes back on the next visit
+    }
+  }
+
+  const connected = $derived(online && cloud.status === 'signed-in' && sync.state !== 'error')
+  /** the most specific reason why this device is not talking to Drive right now */
+  const notice = $derived.by(() => {
+    if (!noticeReady) return null
+    if (cloud.status === 'expired')
+      return { key: 'expired', text: 'Google sign-in expired. Notes stay on this device — tap the cloud icon to sign in again.' }
+    if (cloud.status === 'signed-out')
+      return { key: 'signed-out', text: 'Not signed in. Notes are saved on this device only — tap the cloud icon to connect Google Drive.' }
+    if (sync.state === 'error' && sync.error)
+      return { key: `sync:${sync.error}`, text: `Not connected: ${sync.error} Notes stay on this device.` }
+    if (!online)
+      return { key: 'offline', text: 'Not connected: you are offline. Notes are saved on this device; sync runs again when the connection is back.' }
+    return null
+  })
+  const showNotice = $derived.by(() => !!notice && !dismissed.includes(notice.key))
+
+  // a restored connection starts a fresh round of notices for the next failure
+  $effect(() => {
+    if (connected) {
+      if (!wasConnected) writeDismissed([])
+      wasConnected = true
+    } else {
+      wasConnected = false
+    }
+  })
+
+  function dismissNotice() {
+    if (notice && !dismissed.includes(notice.key)) writeDismissed([...dismissed, notice.key])
+  }
+
   const isDesktop = () => window.matchMedia('(min-width: 768px)').matches
 
   function toggleOutline() {
@@ -95,6 +152,7 @@
     void (async () => {
       await store.init()
       await cloud.init()
+      noticeReady = true
       sync.init()
       if (cloud.hasSession) void sync.syncNow('start')
     })()
@@ -103,6 +161,11 @@
     const onVis = () => document.visibilityState === 'hidden' && flush()
     document.addEventListener('visibilitychange', onVis)
     window.addEventListener('pagehide', flush)
+
+    const onOnline = () => (online = true)
+    const onOffline = () => (online = false)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
 
     // Ctrl/Cmd+F finds inside the open note; Ctrl/Cmd+Shift+F searches every note. While a panel
     // or dialog is open the shortcuts stay out of the way (and keep the browser's own find closed).
@@ -131,6 +194,8 @@
     return () => {
       document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('pagehide', flush)
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
       window.removeEventListener('keydown', onShortcut, true)
       vv?.removeEventListener('resize', fit)
       vv?.removeEventListener('scroll', fit)
@@ -252,16 +317,26 @@
   />
 </div>
 
-{#if pwa.updateReady}
-  <div class="toast" role="status">
-    <span>A new version is ready.</span>
-    <button class="go" onclick={() => pwa.update()}>Update</button>
-    <button class="later" aria-label="Later" onclick={() => (pwa.updateReady = false)}>✕</button>
-  </div>
-{:else if pwa.offlineReady}
-  <div class="toast" role="status">
-    <span>Ready to work offline.</span>
-    <button class="later" aria-label="Close" onclick={() => (pwa.offlineReady = false)}>✕</button>
+{#if pwa.updateReady || pwa.offlineReady || showNotice}
+  <div class="toasts">
+    {#if pwa.updateReady}
+      <div class="toast" role="status">
+        <span>A new version is ready.</span>
+        <button class="go" onclick={() => pwa.update()}>Update</button>
+        <button class="later" aria-label="Later" onclick={() => (pwa.updateReady = false)}>✕</button>
+      </div>
+    {:else if pwa.offlineReady}
+      <div class="toast" role="status">
+        <span>Ready to work offline.</span>
+        <button class="later" aria-label="Close" onclick={() => (pwa.offlineReady = false)}>✕</button>
+      </div>
+    {/if}
+    {#if showNotice && notice}
+      <div class="toast notice" role="status">
+        <span>{notice.text}</span>
+        <button class="later" aria-label="Dismiss" onclick={dismissNotice}>✕</button>
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -438,13 +513,20 @@
       display: none;
     }
   }
-  .toast {
+  .toasts {
     position: fixed;
     left: 12px;
     right: 12px;
     bottom: 64px;
     max-width: 420px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 90;
+    pointer-events: none;
+  }
+  .toast {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -453,8 +535,11 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    z-index: 90;
     font-size: 0.9rem;
+    pointer-events: auto;
+  }
+  .toast.notice {
+    border-color: var(--accent-line);
   }
   .toast span {
     flex: 1;
@@ -471,10 +556,11 @@
     color: var(--muted);
   }
   @media (min-width: 768px) {
-    .toast {
+    .toasts {
       bottom: 16px;
       right: 16px;
       left: auto;
+      width: 420px;
       margin: 0;
     }
   }
