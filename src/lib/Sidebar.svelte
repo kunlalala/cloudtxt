@@ -169,9 +169,13 @@
     background: var(--bg);
   }
   .head .primary {
-    background: var(--accent);
-    color: #0b1220;
-    border-color: transparent;
+    background: var(--accent-fill);
+    border-color: var(--accent-line);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .head .primary:hover {
+    background: var(--accent-fill-hover);
   }
   .main {
     flex: 1;

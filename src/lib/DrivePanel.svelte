@@ -327,9 +327,10 @@
     min-height: 44px;
   }
   .primary {
-    background: var(--accent);
-    color: #0b1220;
-    border-color: transparent;
+    background: var(--accent-fill);
+    color: var(--accent);
+    border-color: var(--accent-line);
+    font-weight: 600;
   }
   .danger {
     background: #c0392b;

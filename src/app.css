@@ -16,6 +16,9 @@
   --hover: #2d333d;
   --select: #34405a;
   --accent: #61afef;
+  --accent-fill: rgba(97, 175, 239, 0.16);
+  --accent-fill-hover: rgba(97, 175, 239, 0.26);
+  --accent-line: rgba(97, 175, 239, 0.45);
   --mono: ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace;
   font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 16px;
