@@ -197,20 +197,18 @@
   const BULLET_RE = /^(?:-|\d+\.)[ \t]+/
 
   /**
-   * Wrapped lines keep their indentation (hanging indent) and a long word can no longer leave an
-   * empty row behind the indentation:
-   * - the line gets padding-left = indentation (plus bullet marker) and a matching negative
+   * Wrapped lines keep their indentation (hanging indent):
+   * - the line gets padding-left = indentation (plus a bullet marker) and a matching negative
    *   text-indent, so the continuation rows start under the first character of the text;
-   * - the leading whitespace and the bullet marker are one unbreakable piece, so the line cannot
-   *   wrap right after them;
+   * - the indentation is drawn as an inline box of exactly that many columns (class cm-hang,
+   *   --cols = columns): a Tab in a line with a negative text-indent is drawn narrower than its
+   *   tab stop, which left every wrapped row right of the text above it;
+   * - the bullet marker keeps its own space unbreakable, so a row cannot end right after "-";
    * - it is measured in the normal font (--cw is one "ch" of the editor font, resolved on
    *   .cm-content), so a bigger heading or CJK text does not change the indent width.
    */
-  const lead = (tab: number) =>
-    Decoration.mark({
-      class: 'cm-lead',
-      attributes: { style: `tab-size: calc(${tab} * 1ch)` },
-    })
+  const lead = Decoration.mark({ class: 'cm-lead' })
+  const hangBox = Decoration.mark({ class: 'cm-hang' })
 
   const layout = ViewPlugin.fromClass(
     class {
@@ -225,8 +223,7 @@
       build(view: EditorView) {
         const b = new RangeSetBuilder<Decoration>()
         const { doc, tabSize } = view.state
-        const mark = lead(tabSize)
-        const hang = new Map<number, Decoration>()
+        const hang = new Map<string, Decoration>()
         let last = -1
         for (const { from, to } of view.visibleRanges) {
           for (let pos = from; pos <= to; ) {
@@ -249,17 +246,18 @@
             if (marker === rest.length) continue
             const hangCols = cols + marker
             if (!hangCols) continue
-            let d = hang.get(hangCols)
+            let d = hang.get(`${cols}:${hangCols}`)
             if (!d) {
               d = Decoration.line({
                 attributes: {
-                  style: `padding-left: calc(12px + var(--cw) * ${hangCols}); text-indent: calc(var(--cw) * -${hangCols})`,
+                  style: `--cols: ${cols}; padding-left: calc(12px + var(--cw) * ${hangCols}); text-indent: calc(var(--cw) * -${hangCols})`,
                 },
               })
-              hang.set(hangCols, d)
+              hang.set(`${cols}:${hangCols}`, d)
             }
             b.add(line.from, line.from, d)
-            b.add(line.from, line.from + end + marker, mark)
+            if (end) b.add(line.from, line.from + end, hangBox)
+            if (marker) b.add(line.from + end, line.from + end + marker, lead)
           }
         }
         return b.finish()
@@ -518,6 +516,13 @@
       },
       '.cm-img-missing': { color: '#ff6b6b', fontSize: '0.9em' },
       '.cm-lead': { fontSize: 'var(--ed-size)', fontWeight: '400', whiteSpace: 'pre' },
+      '.cm-hang': {
+        display: 'inline-block',
+        width: 'calc(var(--cw) * var(--cols))',
+        fontSize: 'var(--ed-size)',
+        fontWeight: '400',
+        whiteSpace: 'pre',
+      },
       '.cm-h1': { fontSize: HEADING_SIZES[0], color: HEADING_COLORS[0] },
       '.cm-h2': { fontSize: HEADING_SIZES[1], color: HEADING_COLORS[1] },
       '.cm-h3': { fontSize: HEADING_SIZES[2], color: HEADING_COLORS[2] },
