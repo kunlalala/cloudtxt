@@ -193,12 +193,16 @@
     },
   )
 
+  /** a bullet at the start of the text: "- " or "1. " (after the indentation) */
+  const BULLET_RE = /^(?:-|\d+\.)[ \t]+/
+
   /**
    * Wrapped lines keep their indentation (hanging indent) and a long word can no longer leave an
    * empty row behind the indentation:
-   * - the line gets padding-left = indentation and a matching negative text-indent, so the
-   *   continuation rows start under the first character of the text;
-   * - the leading whitespace is one unbreakable piece, so the line cannot wrap right after it;
+   * - the line gets padding-left = indentation (plus bullet marker) and a matching negative
+   *   text-indent, so the continuation rows start under the first character of the text;
+   * - the leading whitespace and the bullet marker are one unbreakable piece, so the line cannot
+   *   wrap right after them;
    * - it is measured in the normal font (--cw is one "ch" of the editor font, resolved on
    *   .cm-content), so a bigger heading or CJK text does not change the indent width.
    */
@@ -237,18 +241,25 @@
               cols += text[end] === '\t' ? tabSize - (cols % tabSize) : 1
               end++
             }
-            if (!end || end === text.length) continue
-            let d = hang.get(cols)
+            const rest = text.slice(end)
+            if (!rest) continue
+            const bullet = BULLET_RE.exec(rest)
+            const marker = bullet ? bullet[0].length : 0
+            // nothing to hang: no indentation and no bullet, or a line that is only the marker
+            if (marker === rest.length) continue
+            const hangCols = cols + marker
+            if (!hangCols) continue
+            let d = hang.get(hangCols)
             if (!d) {
               d = Decoration.line({
                 attributes: {
-                  style: `padding-left: calc(12px + var(--cw) * ${cols}); text-indent: calc(var(--cw) * -${cols})`,
+                  style: `padding-left: calc(12px + var(--cw) * ${hangCols}); text-indent: calc(var(--cw) * -${hangCols})`,
                 },
               })
-              hang.set(cols, d)
+              hang.set(hangCols, d)
             }
             b.add(line.from, line.from, d)
-            b.add(line.from, line.from + end, mark)
+            b.add(line.from, line.from + end + marker, mark)
           }
         }
         return b.finish()
